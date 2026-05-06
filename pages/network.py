@@ -1,4 +1,4 @@
-"""Drug-Reaction Network page — co-occurrence heatmap and top pairs from real data."""
+"""Drug-Reaction Network page  co-occurrence heatmap and top pairs from real data."""
 from __future__ import annotations
 
 import pandas as pd
@@ -254,7 +254,7 @@ def layout() -> html.Div:
         dbc.Row([
             dbc.Col(
                 viz_card("Drug–Reaction Co-occurrence Heatmap",
-                         "Top 10 drugs × top 10 reactions — switch metric with the selector above",
+                         "Top 10 drugs × top 10 reactions  switch metric with the selector above",
                          graph(_heatmap_fig(_PAIRS), 400, graph_id="net-heatmap-chart")),
                 md=12,
             ),

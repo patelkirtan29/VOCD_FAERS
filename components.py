@@ -68,7 +68,7 @@ def viz_card(title: str, subtitle: str, *children) -> html.Div:
         html.Div(title,    className="vc-title"),
         html.Div(subtitle, className="vc-subtitle"),
         *children,
-    ], className="viz-card ")
+    ], className="viz-card")
 
 
 def data_table(

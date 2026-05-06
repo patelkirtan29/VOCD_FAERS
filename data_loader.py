@@ -39,6 +39,7 @@ CHART_T = go.layout.Template(
         xaxis=dict(
             gridcolor="#e8eaf3", linecolor="#BFC7D9",
             zeroline=False, tickfont=dict(size=11, color="#6A8FD9"),
+            automargin=True,
         ),
         yaxis=dict(
             gridcolor="#e8eaf3", linecolor="#BFC7D9",

@@ -44,7 +44,7 @@ def _reaction_outcomes_donut() -> go.Figure:
 
 def _top_drugs_bar() -> go.Figure:
     if not TOP_DRUGS.empty:
-        df = TOP_DRUGS.head(8).sort_values("report_mentions")
+        df = TOP_DRUGS.head(8).sort_values("report_mentions", ascending=False)
         drugs  = df["medicinalproduct"].tolist()
         counts = df["report_mentions"].tolist()
     else:
@@ -52,22 +52,22 @@ def _top_drugs_bar() -> go.Figure:
         counts = [50113, 45200, 38900, 32000, 28500, 21000, 18000, 16500]
 
     n = len(drugs)
-    bar_colors = [f"rgba(37,99,235,{0.35 + 0.09 * i})" for i in range(n)]
-    bar_colors[-1] = BLUE
+    bar_colors = [f"rgba(37,99,235,{0.95 - 0.09 * i})" for i in range(n)]
+    bar_colors[0] = BLUE
 
     fig = go.Figure(go.Bar(
-        x=counts, y=drugs,
-        orientation="h",
-        marker=dict(color=bar_colors, line=dict(color="rgba(0,0,0,0)")),
+        x=drugs, y=counts,
+        marker=dict(color=bar_colors, line=dict(color="rgba(0,0,0,0)"), cornerradius=6),
         text=[f"{v:,}" for v in counts],
         textposition="outside",
         textfont=dict(size=10, color="#0D0D0D"),
-        hovertemplate="<b>%{y}</b><br>%{x:,} mentions<extra></extra>",
+        hovertemplate="<b>%{x}</b><br>%{y:,} mentions<extra></extra>",
     ))
     fig.update_layout(
-        xaxis=dict(showgrid=False, showticklabels=False),
-        yaxis=dict(tickfont=dict(size=11, color="#0D0D0D")),
-        margin=dict(l=10, r=65, t=10, b=10),
+        xaxis=dict(tickfont=dict(size=10, color="#0D0D0D"), tickangle=-30, automargin=True),
+        yaxis=dict(showgrid=True, gridcolor="#EFEFEF", tickformat=",",
+                   range=[0, max(counts) * 1.18]),
+        margin=dict(l=10, r=10, t=20, b=10),
     )
     return fig
 
@@ -124,7 +124,7 @@ def layout() -> html.Div:
 
     return html.Div([
 
-        # Row 1 — KPI cards
+        # Row 1  KPI cards
         dbc.Row([
             dbc.Col(stat_card("Total Reports",    f"{N_REPORTS:,}",      "Q4 2025",         True,  BLUE,   icon="bi-file-earmark-text-fill"), md=True),
             dbc.Col(stat_card("Drug Records",     f"{N_DRUGS/1e6:.2f}M", "submissions",     True,  PURPLE, icon="bi-capsule-pill"),           md=True),
@@ -133,7 +133,7 @@ def layout() -> html.Div:
             dbc.Col(stat_card("Fatal Cases",      f"{fatal_n:,}",        f"{FATAL_R*100:.1f}%",   False, RED,    icon="bi-heartbreak-fill"),   md=True),
         ], class_name="g-3 row-gap"),
 
-        # Row 2 — Donut + Top Drugs
+        # Row 2  Donut + Top Drugs
         dbc.Row([
             dbc.Col(
                 viz_card(
@@ -153,19 +153,19 @@ def layout() -> html.Div:
             ),
         ], class_name="g-3 row-gap"),
 
-        # Row 3 — Monthly trend
+        # Row 3  Monthly trend
         dbc.Row([
             dbc.Col(
                 viz_card(
                     "Report Volume Trend",
-                    "All reports vs serious reports — trailing 24 months through Q4 2025",
+                    "All reports vs serious reports  trailing 24 months through Q4 2025",
                     graph(_TREND, 270),
                 ),
                 md=12,
             ),
         ], class_name="g-3 row-gap"),
 
-        # Row 4 — Dataset summary table
+        # Row 4  Dataset summary table
         dbc.Row([
             dbc.Col(
                 html.Div([

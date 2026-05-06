@@ -1,4 +1,4 @@
-"""Geographic View page — US state-level estimated report distribution."""
+"""Geographic View page  US state-level estimated report distribution."""
 from __future__ import annotations
 
 import pandas as pd
@@ -56,7 +56,7 @@ _REGION_OPTS = [{"label": "All Regions", "value": "all"}] + [
 
 def _kpi_cards(df: pd.DataFrame):
     total   = int(df["reports"].sum())
-    top_state = df.loc[df["reports"].idxmax(), "state"] if not df.empty else "—"
+    top_state = df.loc[df["reports"].idxmax(), "state"] if not df.empty else ""
     top_n     = int(df["reports"].max()) if not df.empty else 0
     n_states  = len(df)
     avg       = int(df["reports"].mean()) if not df.empty else 0
@@ -95,27 +95,26 @@ def _choropleth_fig(df: pd.DataFrame) -> go.Figure:
 
 
 def _top_states_fig(df: pd.DataFrame) -> go.Figure:
-    top = df.nlargest(15, "reports").sort_values("reports")
+    top = df.nlargest(15, "reports").sort_values("reports", ascending=False)
     n = len(top)
-    colors = [f"rgba(5,150,105,{0.28 + 0.05 * i})" for i in range(n)]
+    colors = [f"rgba(22, 109, 196,{0.90 - 0.04 * i})" for i in range(n)]
     if n:
-        colors[-1] = GREEN
+        colors[0] = GREEN
 
     fig = go.Figure(go.Bar(
-        x=top["reports"].tolist(), y=top["state"].tolist(),
-        orientation="h",
-        marker=dict(color=colors, line=dict(color="rgba(0,0,0,0)")),
+        x=top["state"].tolist(), y=top["reports"].tolist(),
+        marker=dict(color=colors, line=dict(color="rgba(0,0,0,0)"), cornerradius=6),
         text=[f"{v:,}" for v in top["reports"].tolist()],
         textposition="outside",
         textfont=dict(size=10, color="#0D0D0D"),
-        hovertemplate="<b>%{y}</b><br>Est. %{x:,} reports<extra></extra>",
+        hovertemplate="<b>%{x}</b><br>Est. %{y:,} reports<extra></extra>",
     ))
     fig.update_layout(
         height=380, template=CHART_T,
-        xaxis=dict(showgrid=False, showticklabels=False,
-                   range=[0, top["reports"].max() * 1.22]),
-        yaxis=dict(tickfont=dict(size=11), automargin=True),
-        margin=dict(l=10, r=10, t=10, b=10),
+        xaxis=dict(tickfont=dict(size=11)),
+        yaxis=dict(showgrid=True, gridcolor="#EFEFEF", tickformat=",",
+                   range=[0, top["reports"].max() * 1.18]),
+        margin=dict(l=10, r=10, t=20, b=10),
     )
     return fig
 
@@ -204,7 +203,7 @@ def layout() -> html.Div:
                        "border": "1px solid #BFC7D9", "color": "#295591"},
             ),
             html.Div(
-                "Estimated distribution — no country/state field in FAERS Q4 2025 extract",
+                "Estimated distribution  no country/state field in FAERS Q4 2025 extract",
                 style={"fontSize": "11px", "color": "#94a3b8",
                        "display": "flex", "alignItems": "center"},
             ),
@@ -215,7 +214,7 @@ def layout() -> html.Div:
         dbc.Row([
             dbc.Col(
                 viz_card("US Report Distribution (Estimated)",
-                         "Population-weighted estimate — darker = more reports",
+                         "Population-weighted estimate  darker = more reports",
                          graph(_choropleth_fig(_GEO_DF), 400, graph_id="geo-map-chart")),
                 md=12,
             ),

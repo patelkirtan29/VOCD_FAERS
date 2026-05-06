@@ -1,4 +1,4 @@
-"""Severity & Outcomes page — seriousness scores and reaction outcomes from real data."""
+"""Severity & Outcomes page  seriousness scores and reaction outcomes from real data."""
 from __future__ import annotations
 
 import pandas as pd
@@ -59,8 +59,8 @@ def _kpi_cards(df: pd.DataFrame):
     high    = (df["seriousness_score"] >= 3).sum()
     return [
         dbc.Col(stat_card("Reports",        f"{n:,}",        "",                    True,  BLUE,   icon="bi-file-earmark-text-fill"),    md=True),
-        dbc.Col(stat_card("Serious",        f"{serious:,}",  f"{serious/n*100:.1f}%" if n else "—", True,  ORANGE, icon="bi-exclamation-triangle-fill"), md=True),
-        dbc.Col(stat_card("Fatal",          f"{fatal:,}",    f"{fatal/n*100:.1f}%"   if n else "—", False, RED,    icon="bi-heart-pulse-fill"),          md=True),
+        dbc.Col(stat_card("Serious",        f"{serious:,}",  f"{serious/n*100:.1f}%" if n else "", True,  ORANGE, icon="bi-exclamation-triangle-fill"), md=True),
+        dbc.Col(stat_card("Fatal",          f"{fatal:,}",    f"{fatal/n*100:.1f}%"   if n else "", False, RED,    icon="bi-heart-pulse-fill"),          md=True),
         dbc.Col(stat_card("Avg Score",      f"{avg_sc}",     "0–6 scale",            True,  PURPLE, icon="bi-star-fill"),                 md=True),
         dbc.Col(stat_card("High Severity",  f"{high:,}",     "score ≥ 3",            False, PINK,   icon="bi-lightning-fill"),           md=True),
     ]
@@ -97,32 +97,25 @@ def _outcome_fig(reac: pd.DataFrame) -> go.Figure:
 def _score_dist_fig(df: pd.DataFrame) -> go.Figure:
     counts = df["seriousness_score"].value_counts().sort_index().reset_index()
     counts.columns = ["score", "count"]
-    score_labels = {
-        0: "0 – Non-Serious",
-        1: "1 – One criterion",
-        2: "2 – Two criteria",
-        3: "3 – Three criteria",
-        4: "4 – Four criteria",
-        5: "5 – Five criteria",
-        6: "6 – All criteria",
-    }
+    score_labels = ["Non-Serious","One criterion","Two criteria","Three criteria","Four criteria","Five criteria","All criteria",]
     palette = [TEAL, ORANGE, ORANGE, RED, RED, RED, RED]
 
     fig = go.Figure(go.Bar(
-        x=[score_labels.get(int(s), str(s)) for s in counts["score"].tolist()],
+        x=score_labels,
         y=counts["count"].tolist(),
         marker_color=[palette[min(int(s), 6)] for s in counts["score"].tolist()],
         text=[f"{v:,}" for v in counts["count"].tolist()],
         textposition="outside",
         textfont=dict(size=10, color="#0D0D0D"),
         hovertemplate="<b>%{x}</b><br>%{y:,} reports<extra></extra>",
+        marker=dict(cornerradius=8)
     ))
     fig.update_layout(
         height=310, template=CHART_T,
         xaxis=dict(tickfont=dict(size=10)),
         yaxis=dict(title="Reports", tickformat=",",
                    range=[0, counts["count"].max() * 1.18]),
-        margin=dict(l=10, r=10, t=10, b=10),
+        margin=dict(l=0, r=10, t=10, b=10),
     )
     return fig
 
@@ -173,7 +166,7 @@ def _score_by_sex_fig(df: pd.DataFrame) -> go.Figure:
             name=sex, x=sub["seriousness_score"].tolist(),
             y=sub["count"].tolist(),
             marker_color=color, opacity=0.85,
-            hovertemplate=f"<b>{sex}</b> — Score %{{x}}<br>%{{y:,}} reports<extra></extra>",
+            hovertemplate=f"<b>{sex}</b>  Score %{{x}}<br>%{{y:,}} reports<extra></extra>",
         ))
     fig.update_layout(
         height=270, template=CHART_T, barmode="group",
@@ -357,15 +350,16 @@ def layout() -> html.Div:
             dbc.Col(
                 viz_card("Seriousness Score Distribution",
                          "0 = Non-Serious · higher = more seriousness criteria met",
-                         graph(_score_dist_fig(_RPTS), 310, graph_id="sev-score-chart")),
+                         graph(_score_dist_fig(_RPTS), 370, graph_id="sev-score-chart")),
                 md=7,
+                class_name=""
             ),
         ], class_name="g-3 row-gap"),
 
         dbc.Row([
             dbc.Col(
                 viz_card("Avg Seriousness Score by Age Group",
-                         "Mean score across known-age patients — Unknown excluded",
+                         "Mean score across known-age patients  Unknown excluded",
                          graph(_score_by_age_fig(_RPTS), 270, graph_id="sev-age-chart")),
                 md=6,
             ),
@@ -380,13 +374,13 @@ def layout() -> html.Div:
         dbc.Row([
             dbc.Col(
                 viz_card("Severity Funnel",
-                         "Total → Serious → Fatal — cascade of report severity",
+                         "Total → Serious → Fatal  cascade of report severity",
                          graph(_funnel_fig(_RPTS), 280, graph_id="sev-funnel-chart")),
                 md=4,
             ),
             dbc.Col(
                 viz_card("Outcome × Age Group Heatmap",
-                         "Reaction outcome counts across age bands — darker = more reactions",
+                         "Reaction outcome counts across age bands  darker = more reactions",
                          graph(_outcome_heatmap_fig(_REAC, _RPTS), 280, graph_id="sev-heatmap-chart")),
                 md=8,
             ),

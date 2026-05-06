@@ -1,4 +1,4 @@
-"""Reaction Explorer page — search, body-system, and severity filters backed by real data."""
+"""Reaction Explorer page  search, body-system, and severity filters backed by real data."""
 from __future__ import annotations
 
 import pandas as pd
@@ -12,7 +12,7 @@ from data_loader import (
     CHART_T, load_csv,
 )
 
-# ── MedDRA SOC mapping (taxonomy — not data-dependent) ───────────────────────
+# ── MedDRA SOC mapping (taxonomy  not data-dependent) ───────────────────────
 
 _SOC = {
     "Off label use":                              "Product/Drug Issues",
@@ -354,12 +354,12 @@ def layout() -> html.Div:
             ),
         ], className="filter-row"),
 
-        # Row 1 — Bar + Body-system donut
+        # Row 1  Bar + Body-system donut
         dbc.Row([
             dbc.Col(
                 viz_card(
                     "Top Reported Reactions",
-                    "Ranked by report count — color indicates body system",
+                    "Ranked by report count  color indicates body system",
                     graph(_bar_fig(_DF), 380, graph_id="rxn-bar-chart"),
                 ),
                 md=7,
@@ -367,14 +367,14 @@ def layout() -> html.Div:
             dbc.Col(
                 viz_card(
                     "Body System Distribution",
-                    "MedDRA System Organ Class breakdown — selected system highlighted",
+                    "MedDRA System Organ Class breakdown  selected system highlighted",
                     graph(_system_fig(_DF), 380, graph_id="rxn-system-chart"),
                 ),
                 md=5,
             ),
         ], class_name="g-3 row-gap"),
 
-        # Row 2 — Severity bubble
+        # Row 2  Severity bubble
         dbc.Row([
             dbc.Col(
                 viz_card(
@@ -386,7 +386,7 @@ def layout() -> html.Div:
             ),
         ], class_name="g-3 row-gap"),
 
-        # Row 3 — Detail table
+        # Row 3  Detail table
         dbc.Row([
             dbc.Col(
                 html.Div([

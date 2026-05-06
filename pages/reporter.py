@@ -1,4 +1,4 @@
-"""Reporter Insights page — drug action, role, and route breakdowns from real data."""
+"""Reporter Insights page  drug action, role, and route breakdowns from real data."""
 from __future__ import annotations
 
 import pandas as pd
@@ -212,8 +212,9 @@ def _sunburst_fig(df: pd.DataFrame) -> go.Figure:
     parents = ([""]
                + ["All"] * len(keep_roles)
                + grp["role_label"].tolist())
-    values  = ([0]
-               + [grp[grp["role_label"] == r]["count"].sum() for r in keep_roles]
+    role_totals = [int(grp[grp["role_label"] == r]["count"].sum()) for r in keep_roles]
+    values  = ([sum(role_totals)]
+               + role_totals
                + grp["count"].tolist())
 
     _role_pal   = {"Suspect": PURPLE, "Concomitant": TEAL, "Interacting": ORANGE}
@@ -319,29 +320,15 @@ def layout() -> html.Div:
                 viz_card("Drug Action Taken",
                          "Action reported when adverse event occurred",
                          graph(_action_fig(_DRUG), 330, graph_id="rep-action-chart")),
-                md=5,
+                md=6,
             ),
             dbc.Col(
                 viz_card("Drug Role Distribution",
                          "Characterization of each drug in the report",
                          graph(_role_fig(_DRUG), 330, graph_id="rep-role-chart")),
-                md=4,
+                md=6,
             ),
-            dbc.Col(
-                viz_card("Route of Administration",
-                         "Top known routes — Unknown excluded",
-                         graph(_route_bar_fig(_DRUG), 300, graph_id="rep-route-chart")),
-                md=3,
-            ),
-        ], class_name="g-3 row-gap"),
-
-        dbc.Row([
-            dbc.Col(
-                viz_card("Action Taken by Drug Role",
-                         "Grouped by role — how physicians responded per drug type",
-                         graph(_action_by_role_fig(_DRUG), 300, graph_id="rep-action-by-role")),
-                md=12,
-            ),
+            
         ], class_name="g-3 row-gap"),
 
         dbc.Row([
@@ -349,6 +336,21 @@ def layout() -> html.Div:
                 viz_card("Role → Action Sunburst",
                          "Hierarchical breakdown: drug role (inner) → action taken (outer)",
                          graph(_sunburst_fig(_DRUG), 340, graph_id="rep-sunburst-chart")),
+                md=5,
+            ),
+            dbc.Col(
+                viz_card("Route of Administration",
+                         "Top known routes  Unknown excluded",
+                         graph(_route_bar_fig(_DRUG), 300, graph_id="rep-route-chart")),
+                md=7,
+            ),
+        ], class_name="g-3 row-gap"),
+
+        dbc.Row([
+            dbc.Col(
+                viz_card("Action Taken by Drug Role",
+                         "Grouped by role  how physicians responded per drug type",
+                         graph(_action_by_role_fig(_DRUG), 300, graph_id="rep-action-by-role")),
                 md=12,
             ),
         ], class_name="g-3 row-gap"),

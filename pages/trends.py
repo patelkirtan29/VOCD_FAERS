@@ -1,4 +1,4 @@
-"""Trends & Timeline page — real monthly_reports.csv data."""
+"""Trends & Timeline page  real monthly_reports.csv data."""
 from __future__ import annotations
 
 import pandas as pd
@@ -124,12 +124,12 @@ def _kpi_cards(df: pd.DataFrame):
     total   = int(df["report_count"].sum())
     serious = int(df["serious_count"].sum())
     fatal   = int(df["fatal_count"].sum())
-    peak    = df.loc[df["report_count"].idxmax(), "report_month"] if not df.empty else "—"
+    peak    = df.loc[df["report_count"].idxmax(), "report_month"] if not df.empty else ""
     s_rate  = round(serious / total * 100, 1) if total else 0
     return [
         dbc.Col(stat_card("Total Reports",   f"{total:,}",   "in period",       True,  BLUE,   icon="bi-file-earmark-text-fill"),    md=True),
         dbc.Col(stat_card("Serious Reports", f"{serious:,}", f"{s_rate}%",      True,  ORANGE, icon="bi-exclamation-triangle-fill"), md=True),
-        dbc.Col(stat_card("Fatal Reports",   f"{fatal:,}",   f"{fatal/total*100:.1f}%" if total else "—", False, RED,    icon="bi-heart-pulse-fill"),         md=True),
+        dbc.Col(stat_card("Fatal Reports",   f"{fatal:,}",   f"{fatal/total*100:.1f}%" if total else "", False, RED,    icon="bi-heart-pulse-fill"),         md=True),
         dbc.Col(stat_card("Peak Month",      str(peak),      "highest volume",  True,  PURPLE, icon="bi-calendar-event-fill"),      md=True),
         dbc.Col(stat_card("Months Covered",  str(len(df)),   "data points",     True,  TEAL,   icon="bi-calendar3"),                md=True),
     ]
@@ -200,7 +200,7 @@ _MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
 
 
 def _animated_bar_fig(df: pd.DataFrame) -> go.Figure:
-    """Animated bar chart — monthly report counts animated frame-by-frame across years."""
+    """Animated bar chart  monthly report counts animated frame-by-frame across years."""
     if df.empty:
         fig = go.Figure()
         fig.update_layout(height=340, template=CHART_T,
@@ -341,7 +341,7 @@ def layout() -> html.Div:
         dbc.Row([
             dbc.Col(
                 viz_card("Report Volume Over Time",
-                         "All reports · Serious · Fatal — full monthly history",
+                         "All reports · Serious · Fatal  full monthly history",
                          graph(_trend_fig(_M), 340, graph_id="trends-line-chart")),
                 md=12,
             ),
@@ -371,7 +371,7 @@ def layout() -> html.Div:
             ),
             dbc.Col(
                 viz_card("Monthly Volume Calendar Heatmap",
-                         "Report count by month × year — darker = more reports",
+                         "Report count by month × year  darker = more reports",
                          graph(_calendar_heatmap_fig(_M), 280, graph_id="trends-calendar-chart")),
                 md=7,
             ),
@@ -381,7 +381,7 @@ def layout() -> html.Div:
             dbc.Col(
                 viz_card(
                     "Animated Monthly Report Counts",
-                    "Bar chart animating year-by-year — press ▶ to play; color = serious rate %",
+                    "Bar chart animating year-by-year  press ▶ to play; color = serious rate %",
                     graph(_animated_bar_fig(_M), 380, graph_id="trends-animated-chart"),
                 ),
                 md=12,

@@ -1,4 +1,4 @@
-"""Patient Demographics page — sex, age, and seriousness breakdown from real data."""
+"""Patient Demographics page  sex, age, and seriousness breakdown from real data."""
 from __future__ import annotations
 
 import numpy as np
@@ -47,8 +47,8 @@ def _kpi_cards(df: pd.DataFrame):
     serious = round((df["serious_label"] == "Serious").sum() / n * 100, 1) if n else 0
     return [
         dbc.Col(stat_card("Total Reports", f"{n:,}",           "",                         True,        BLUE,   icon="bi-file-earmark-text-fill"), md=True),
-        dbc.Col(stat_card("Female",        f"{female:,}",      f"{female/n*100:.1f}%" if n else "—", True,  PINK,   icon="bi-gender-female"),          md=True),
-        dbc.Col(stat_card("Male",          f"{male:,}",        f"{male/n*100:.1f}%"   if n else "—", True,  BLUE,   icon="bi-gender-male"),            md=True),
+        dbc.Col(stat_card("Female",        f"{female:,}",      f"{female/n*100:.1f}%" if n else "", True,  PINK,   icon="bi-gender-female"),          md=True),
+        dbc.Col(stat_card("Male",          f"{male:,}",        f"{male/n*100:.1f}%"   if n else "", True,  BLUE,   icon="bi-gender-male"),            md=True),
         dbc.Col(stat_card("Median Age",    f"{med_age} yrs",   "known reports",            True,        TEAL,   icon="bi-person-fill"),            md=True),
         dbc.Col(stat_card("Serious Rate",  f"{serious}%",      "of filtered set",          serious > 50, ORANGE, icon="bi-percent"),               md=True),
     ]
@@ -78,7 +78,13 @@ def _sex_fig(df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def _age_group_fig(df: pd.DataFrame) -> go.Figure:
+_AGEGROUP_GROUP_OPTS = [
+    {"label": "By Seriousness", "value": "serious"},
+    {"label": "By Sex",         "value": "sex"},
+    {"label": "By Fatal",       "value": "fatal"},
+]
+
+def _age_group_fig(df: pd.DataFrame, group_by: str = "serious") -> go.Figure:
     known = df[df["agegrp_label"] != "Unknown"]
     if known.empty:
         fig = go.Figure()
@@ -87,30 +93,73 @@ def _age_group_fig(df: pd.DataFrame) -> go.Figure:
                                             showarrow=False, font=dict(color="#6A8FD9"))])
         return fig
 
-    grp = (
-        known.groupby("agegrp_label")
-        .agg(total=("safetyreportid", "count"),
-             serious=("serious_label", lambda x: (x == "Serious").sum()))
-        .reset_index()
+    known = known.copy()
+    known["agegrp_label"] = pd.Categorical(
+        known["agegrp_label"], categories=_AGE_ORDER, ordered=True
     )
-    grp["agegrp_label"] = pd.Categorical(grp["agegrp_label"], categories=_AGE_ORDER, ordered=True)
-    grp = grp.sort_values("agegrp_label")
 
     fig = go.Figure()
-    fig.add_trace(go.Bar(
-        name="Non-Serious",
-        x=grp["agegrp_label"].tolist(),
-        y=(grp["total"] - grp["serious"]).tolist(),
-        marker_color=TEAL, opacity=0.75,
-        hovertemplate="<b>%{x}</b><br>Non-Serious: %{y:,}<extra></extra>",
-    ))
-    fig.add_trace(go.Bar(
-        name="Serious",
-        x=grp["agegrp_label"].tolist(),
-        y=grp["serious"].tolist(),
-        marker_color=ORANGE,
-        hovertemplate="<b>%{x}</b><br>Serious: %{y:,}<extra></extra>",
-    ))
+
+    if group_by == "sex":
+        segments = [("Female", PINK), ("Male", BLUE), ("Unknown", SLATE)]
+        for label, color in segments:
+            sub = (
+                known[known["sex_label"] == label]
+                .groupby("agegrp_label", observed=True)
+                .size().reset_index(name="count")
+                .sort_values("agegrp_label")
+            )
+            if sub.empty:
+                continue
+            fig.add_trace(go.Bar(
+                name=label,
+                x=sub["agegrp_label"].tolist(),
+                y=sub["count"].tolist(),
+                marker_color=color, opacity=0.82,
+                hovertemplate=f"<b>%{{x}}</b><br>{label}: %{{y:,}}<extra></extra>",
+            ))
+
+    elif group_by == "fatal":
+        segments = [("Non-Fatal", TEAL), ("Fatal", RED)]
+        for label, color in segments:
+            sub = (
+                known[known["fatal_label"] == label]
+                .groupby("agegrp_label", observed=True)
+                .size().reset_index(name="count")
+                .sort_values("agegrp_label")
+            )
+            if sub.empty:
+                continue
+            fig.add_trace(go.Bar(
+                name=label,
+                x=sub["agegrp_label"].tolist(),
+                y=sub["count"].tolist(),
+                marker_color=color, opacity=0.82,
+                hovertemplate=f"<b>%{{x}}</b><br>{label}: %{{y:,}}<extra></extra>",
+            ))
+
+    else:  # serious (default)
+        grp = (
+            known.groupby("agegrp_label", observed=True)
+            .agg(total=("safetyreportid", "count"),
+                 serious=("serious_label", lambda x: (x == "Serious").sum()))
+            .reset_index().sort_values("agegrp_label")
+        )
+        fig.add_trace(go.Bar(
+            name="Non-Serious",
+            x=grp["agegrp_label"].tolist(),
+            y=(grp["total"] - grp["serious"]).tolist(),
+            marker_color=TEAL, opacity=0.75,
+            hovertemplate="<b>%{x}</b><br>Non-Serious: %{y:,}<extra></extra>",
+        ))
+        fig.add_trace(go.Bar(
+            name="Serious",
+            x=grp["agegrp_label"].tolist(),
+            y=grp["serious"].tolist(),
+            marker_color=ORANGE,
+            hovertemplate="<b>%{x}</b><br>Serious: %{y:,}<extra></extra>",
+        ))
+
     fig.update_layout(
         height=310, template=CHART_T, barmode="stack",
         xaxis=dict(tickfont=dict(size=11)),
@@ -299,16 +348,15 @@ def _age_violin_fig(df: pd.DataFrame) -> go.Figure:
 def register_callbacks(app):
 
     @app.callback(
-        Output("demo-kpi-row",        "children"),
-        Output("demo-sex-chart",      "figure"),
-        Output("demo-agegroup-chart", "figure"),
-        Output("demo-agehist-chart",  "figure"),
-        Output("demo-fatal-chart",    "figure"),
-        Output("demo-complex-chart",  "figure"),
-        Output("demo-box-chart",      "figure"),
-        Output("demo-violin-chart",   "figure"),
-        Input("demo-sex-select",      "value"),
-        Input("demo-serious-select",  "value"),
+        Output("demo-kpi-row",       "children"),
+        Output("demo-sex-chart",     "figure"),
+        Output("demo-agehist-chart", "figure"),
+        Output("demo-fatal-chart",   "figure"),
+        Output("demo-complex-chart", "figure"),
+        Output("demo-box-chart",     "figure"),
+        Output("demo-violin-chart",  "figure"),
+        Input("demo-sex-select",     "value"),
+        Input("demo-serious-select", "value"),
     )
     def _update(sex, serious):
         df = _RPTS.copy()
@@ -318,17 +366,32 @@ def register_callbacks(app):
             df = df[df["serious_label"] == "Serious"]
         elif serious == "fatal":
             df = df[df["fatal_label"] == "Fatal"]
-
         return (
             _kpi_cards(df),
             _sex_fig(df),
-            _age_group_fig(df),
             _age_hist_fig(df),
             _fatal_by_age_fig(df),
             _complexity_fig(df),
             _age_boxplot_fig(df),
             _age_violin_fig(df),
         )
+
+    @app.callback(
+        Output("demo-agegroup-chart", "figure"),
+        Input("demo-sex-select",      "value"),
+        Input("demo-serious-select",  "value"),
+        Input("demo-agegroup-group",  "value"),
+        prevent_initial_call=True,
+    )
+    def _update_agegroup(sex, serious, group_by):
+        df = _RPTS.copy()
+        if sex and sex != "all":
+            df = df[df["sex_label"] == sex]
+        if serious == "serious":
+            df = df[df["serious_label"] == "Serious"]
+        elif serious == "fatal":
+            df = df[df["fatal_label"] == "Fatal"]
+        return _age_group_fig(df, group_by or "serious")
 
     @app.callback(
         Output("demo-sex-select",     "value"),
@@ -371,7 +434,7 @@ def layout() -> html.Div:
         # KPI cards row (updatable via callback)
         dbc.Row(id="demo-kpi-row", children=_kpi_cards(_RPTS), class_name="g-3 row-gap"),
 
-        # Row 1 — Sex donut + Age group stacked bar
+        # Row 1  Sex donut + Age group stacked bar
         dbc.Row([
             dbc.Col(
                 viz_card("Sex Distribution",
@@ -380,24 +443,37 @@ def layout() -> html.Div:
                 md=4,
             ),
             dbc.Col(
-                viz_card("Reports by Age Group",
-                         "Stacked by seriousness — Unknown age excluded",
-                         graph(_age_group_fig(_RPTS), 310, graph_id="demo-agegroup-chart")),
+                viz_card(
+                    "Reports by Age Group",
+                    "Unknown age excluded  use dropdown to switch grouping",
+                    html.Div([
+                        dbc.Select(
+                            id="demo-agegroup-group",
+                            options=_AGEGROUP_GROUP_OPTS,
+                            value="serious",
+                            style={"fontSize": "12.5px", "width": "160px",
+                                   "border": "1px solid #BFC7D9", "borderRadius": "7px",
+                                   "background": "#ffffff", "height": "32px",
+                                   "marginBottom": "8px"},
+                        ),
+                    ]),
+                    graph(_age_group_fig(_RPTS), 310, graph_id="demo-agegroup-chart"),
+                ),
                 md=8,
             ),
         ], class_name="g-3 row-gap"),
 
-        # Row 2 — Age histogram
+        # Row 2  Age histogram
         dbc.Row([
             dbc.Col(
                 viz_card("Age Distribution (5-year bins)",
-                         "Report count by patient age — 0 to 100 years",
+                         "Report count by patient age  0 to 100 years",
                          graph(_age_hist_fig(_RPTS), 270, graph_id="demo-agehist-chart")),
                 md=12,
             ),
         ], class_name="g-3 row-gap"),
 
-        # Row 3 — Fatal rate by age + Complexity by age
+        # Row 3  Fatal rate by age + Complexity by age
         dbc.Row([
             dbc.Col(
                 viz_card("Fatal Rate by Age Group",
@@ -413,11 +489,11 @@ def layout() -> html.Div:
             ),
         ], class_name="g-3 row-gap"),
 
-        # Row 4 — Box plot + Violin plot
+        # Row 4  Box plot + Violin plot
         dbc.Row([
             dbc.Col(
                 viz_card("Age Distribution by Sex (Box Plot)",
-                         "Median, IQR, and spread of patient age — Female vs Male",
+                         "Median, IQR, and spread of patient age  Female vs Male",
                          graph(_age_boxplot_fig(_RPTS), 300, graph_id="demo-box-chart")),
                 md=6,
             ),

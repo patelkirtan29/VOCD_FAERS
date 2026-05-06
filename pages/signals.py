@@ -1,4 +1,4 @@
-"""Safety Signals page — top drug-reaction pairs ranked by severity metrics."""
+"""Safety Signals page  top drug-reaction pairs ranked by severity metrics."""
 from __future__ import annotations
 
 import pandas as pd
@@ -70,7 +70,7 @@ def _kpi_cards(df: pd.DataFrame):
     top_score = round(df["signal_score"].max(), 1) if n else 0
     top_pair  = (
         f"{df.iloc[0]['medicinalproduct']} + {df.iloc[0]['reactionmeddrapt']}"
-        if n else "—"
+        if n else ""
     )
     return [
         dbc.Col(stat_card("Signal Pairs",     f"{n:,}",          "drug-reaction pairs",  True,  BLUE,   icon="bi-link-45deg"),              md=True),
@@ -294,7 +294,7 @@ def layout() -> html.Div:
         dbc.Row([
             dbc.Col(
                 viz_card("Top Safety Signals",
-                         "Ranked by selected metric — bubble size = report count in scatter",
+                         "Ranked by selected metric  bubble size = report count in scatter",
                          graph(_signal_bar_fig(_SIG), 430, graph_id="sig-bar-chart")),
                 md=6,
             ),

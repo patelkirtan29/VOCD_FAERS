@@ -1,4 +1,4 @@
-"""Drug Analysis page — search, role, and route filters backed by real processed data."""
+"""Drug Analysis page  search, role, and route filters backed by real processed data."""
 from __future__ import annotations
 
 import pandas as pd
@@ -215,10 +215,14 @@ def _treemap_fig(df: pd.DataFrame) -> go.Figure:
     top   = df.nlargest(30, "count")
     roles = top["role"].dropna().unique().tolist()
 
+    top_roles = top["role"].fillna("Unknown").tolist()
+    role_totals = {r: int(top[top["role"].fillna("Unknown") == r]["count"].sum()) for r in roles}
+    root_total  = sum(role_totals.values())
+
     ids     = ["All"] + roles + top["drug"].tolist()
     labels  = ["All"] + roles + top["drug"].tolist()
-    parents = [""]    + ["All"] * len(roles) + top["role"].fillna("Unknown").tolist()
-    values  = [0]     + [0] * len(roles)     + top["count"].tolist()
+    parents = [""]    + ["All"] * len(roles) + top_roles
+    values  = [root_total] + [role_totals.get(r, 0) for r in roles] + top["count"].tolist()
 
     _pal = {"Suspect": PURPLE, "Concomitant": TEAL, "Interacting": ORANGE,
             "Not Administered": SLATE, "Unknown": "#cbd5e1"}
@@ -347,12 +351,12 @@ def layout() -> html.Div:
             ),
         ], className="filter-row"),
 
-        # Row 1 — Bar + Role donut
+        # Row 1  Bar + Role donut
         dbc.Row([
             dbc.Col(
                 viz_card(
                     "Top Reported Drugs",
-                    "Ranked by report mentions — updates with active filters",
+                    "Ranked by report mentions  updates with active filters",
                     graph(_bar_fig(_DF), 390, graph_id="drug-bar-chart"),
                 ),
                 md=7,
@@ -360,24 +364,24 @@ def layout() -> html.Div:
             dbc.Col(
                 viz_card(
                     "Drug Role Distribution",
-                    "Overall characterization — selected role is highlighted",
+                    "Overall characterization  selected role is highlighted",
                     graph(_role_fig(), 390, graph_id="drug-role-chart"),
                 ),
                 md=5,
             ),
         ], class_name="g-3 row-gap"),
 
-        # Row 1b — Treemap
+        # Row 1b  Treemap
         dbc.Row([
             dbc.Col(
-                viz_card("Drug Treemap — Role × Volume",
+                viz_card("Drug Treemap  Role × Volume",
                          "Each drug sized by report count, grouped by drug role",
                          graph(_treemap_fig(_DF), 360, graph_id="drug-treemap-chart")),
                 md=12,
             ),
         ], class_name="g-3 row-gap"),
 
-        # Row 2 — Detail table + Route pie
+        # Row 2  Detail table + Route pie
         dbc.Row([
             dbc.Col(
                 html.Div([

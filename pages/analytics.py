@@ -1,4 +1,4 @@
-"""Statistical Analysis page — all 10 advanced plot types integrated."""
+"""Statistical Analysis page  all 10 advanced plot types integrated."""
 from __future__ import annotations
 
 import io
@@ -19,6 +19,7 @@ import dash_bootstrap_components as dbc
 from dash import html, Input, Output
 import plotly.graph_objects as go
 import plotly.express as px
+from plotly.subplots import make_subplots
 
 from components import graph, viz_card, stat_card
 from data_loader import (
@@ -26,30 +27,42 @@ from data_loader import (
     CHART_T, load_csv,
 )
 
-# ── Load data once at startup ─────────────────────────────────────────────────
+# ── Load data once at startup  full 41-column demo_cleaned.csv ───────────────
 
-_DF = load_csv(
-    "reports_clean.csv",
-    usecols=[
-        "safetyreportid", "age_years", "patientweight",
-        "num_drugs", "num_reactions", "seriousness_score",
-        "sex_label", "serious_label", "fatal_label", "agegrp_label",
-    ],
-)
+_DF = load_csv("demo_cleaned.csv")
 
-_NUMERICS = ["age_years", "patientweight", "num_drugs", "num_reactions", "seriousness_score"]
+# All numeric columns available for analysis
+_NUMERICS = [
+    "age_years", "patientweight", "num_drugs", "num_reactions",
+    "seriousness_score", "patientonsetage",
+    "seriousnessdeath_flag", "seriousnesslifethreatening_flag",
+    "seriousnesshospitalization_flag", "seriousnessdisabling_flag",
+    "seriousnesscongenitalanomali_flag", "seriousnessother_flag",
+]
 
 _FIELD_OPTS = [
-    {"label": "Age (years)",          "value": "age_years"},
-    {"label": "Patient Weight (kg)",  "value": "patientweight"},
-    {"label": "Number of Drugs",      "value": "num_drugs"},
-    {"label": "Number of Reactions",  "value": "num_reactions"},
-    {"label": "Seriousness Score",    "value": "seriousness_score"},
+    {"label": "Age (years)",                    "value": "age_years"},
+    {"label": "Patient Weight (kg)",            "value": "patientweight"},
+    {"label": "Number of Drugs",                "value": "num_drugs"},
+    {"label": "Number of Reactions",            "value": "num_reactions"},
+    {"label": "Seriousness Score",              "value": "seriousness_score"},
+    {"label": "Onset Age (raw)",                "value": "patientonsetage"},
+    {"label": "Death Flag",                     "value": "seriousnessdeath_flag"},
+    {"label": "Life-Threatening Flag",          "value": "seriousnesslifethreatening_flag"},
+    {"label": "Hospitalization Flag",           "value": "seriousnesshospitalization_flag"},
+    {"label": "Disabling Flag",                 "value": "seriousnessdisabling_flag"},
+    {"label": "Congenital Anomaly Flag",        "value": "seriousnesscongenitalanomali_flag"},
+    {"label": "Other Seriousness Flag",         "value": "seriousnessother_flag"},
 ]
 
 _GROUP_OPTS = [
-    {"label": "By Sex",         "value": "sex_label"},
-    {"label": "By Seriousness", "value": "serious_label"},
+    {"label": "By Sex",               "value": "sex_label"},
+    {"label": "By Seriousness",       "value": "serious_label"},
+    {"label": "By Fatal Outcome",     "value": "fatal_label"},
+    {"label": "By Age Group",         "value": "agegrp_label"},
+    {"label": "By Reporter Type",     "value": "qualification_label"},
+    {"label": "By Report Type",       "value": "reporttype_label"},
+    {"label": "By Country",           "value": "primarysourcecountry"},
 ]
 
 # ── Matplotlib / seaborn styling ──────────────────────────────────────────────
@@ -87,29 +100,65 @@ def _img_card(title: str, subtitle: str, src: str, height: int = 340) -> html.Di
 
 # ── Seaborn/matplotlib static charts (pre-computed once) ─────────────────────
 
-def _corr_heatmap_img() -> str:
+def _corr_heatmap_fig() -> go.Figure:
     sample = (
         _DF[_NUMERICS].dropna()
         .sample(min(8000, len(_DF)), random_state=42)
     )
-    corr = sample.corr()
-    with plt.rc_context(_RC):
-        fig, ax = plt.subplots(figsize=(5.8, 4.5))
-        sns.heatmap(
-            corr, annot=True, fmt=".2f", cmap="coolwarm",
-            center=0, vmin=-1, vmax=1, square=True, ax=ax,
-            linewidths=0.5, linecolor="#e2e8f0",
-            annot_kws={"size": 9, "weight": "bold"},
-            cbar_kws={"shrink": 0.75},
-        )
-        ax.set_title("Pearson Correlation Matrix", fontsize=11,
-                     fontweight="bold", color="#0D0D0D", pad=10)
-        ax.tick_params(labelsize=8.5)
-        fig.tight_layout()
-    return _mpl_to_img(fig)
+    corr = sample.corr().round(2)
+    labels = [c.replace("_", " ").replace("seriousness ", "").title() for c in corr.columns]
+
+    fig = go.Figure(go.Heatmap(
+        z=corr.values.tolist(),
+        x=labels,
+        y=labels,
+        colorscale="RdBu",
+        zmid=0,
+        zmin=-1,
+        zmax=1,
+        text=corr.values.tolist(),
+        texttemplate="%{text:.2f}",
+        textfont=dict(size=10, color="black"),
+        hoverongaps=False,
+        hovertemplate="<b>%{y}</b> × <b>%{x}</b><br>r = %{z:.2f}<extra></extra>",
+        colorbar=dict(
+            title="r",
+            thickness=14,
+            len=0.85,
+            tickformat=".1f",
+        ),
+    ))
+    fig.update_layout(
+        height=600,
+        template=CHART_T,
+        title=dict(text="Pearson Correlation Matrix", font=dict(size=14, color="#0D0D0D")),
+        xaxis=dict(tickangle=-35, tickfont=dict(size=10), side="bottom"),
+        yaxis=dict(tickfont=dict(size=10), autorange="reversed"),
+        margin=dict(l=10, r=10, t=50, b=10),
+    )
+    return fig
 
 
-def _kde_sex_img() -> str:
+_KDE_NORM_OPTS = [
+    {"label": "Raw",           "value": "Raw"},
+    {"label": "Min-Max [0,1]", "value": "Min-Max [0,1]"},
+    {"label": "Z-Score",       "value": "Z-Score"},
+    {"label": "Log (x+1)",     "value": "Log (x+1)"},
+]
+
+def _apply_norm(vals: np.ndarray, method: str) -> np.ndarray:
+    mn, mx = float(vals.min()), float(vals.max())
+    mu, sd = float(vals.mean()), float(vals.std())
+    if method == "Min-Max [0,1]":
+        return (vals - mn) / (mx - mn + 1e-9)
+    if method == "Z-Score":
+        return (vals - mu) / (sd + 1e-9)
+    if method == "Log (x+1)":
+        return np.log1p(vals)
+    return vals  # Raw
+
+
+def _kde_sex_img(method: str = "Raw") -> str:
     sub = (
         _DF[_DF["sex_label"].isin(["Female", "Male"])][["age_years", "sex_label"]]
         .dropna()
@@ -117,22 +166,24 @@ def _kde_sex_img() -> str:
     sub = sub[(sub["age_years"] >= 0) & (sub["age_years"] <= 110)]
     sub = sub.sample(min(20000, len(sub)), random_state=42)
     pal = {"Female": "#A36378", "Male": "#0583F2"}
+    xlabel = "Age (years)" if method == "Raw" else f"Age  {method}"
     with plt.rc_context(_RC):
         fig, ax = plt.subplots(figsize=(5.8, 3.4))
         for sex, color in pal.items():
-            vals = sub[sub["sex_label"] == sex]["age_years"]
+            vals = sub[sub["sex_label"] == sex]["age_years"].values
+            vals = _apply_norm(vals, method)
             sns.kdeplot(vals, ax=ax, label=sex, color=color,
                         linewidth=2.2, fill=True, alpha=0.22)
-        ax.set_xlabel("Age (years)", fontsize=10)
+        ax.set_xlabel(xlabel, fontsize=10)
         ax.set_ylabel("Density", fontsize=10)
-        ax.set_title("Age KDE by Sex", fontsize=11,
+        ax.set_title(f"Age KDE by Sex  [{method}]", fontsize=11,
                      fontweight="bold", color="#0D0D0D")
         ax.legend(fontsize=9)
         fig.tight_layout()
     return _mpl_to_img(fig)
 
 
-def _kde_serious_img() -> str:
+def _kde_serious_img(method: str = "Raw") -> str:
     sub = (
         _DF[_DF["serious_label"].isin(["Serious", "Non-Serious"])]
         [["age_years", "serious_label"]].dropna()
@@ -140,15 +191,17 @@ def _kde_serious_img() -> str:
     sub = sub[(sub["age_years"] >= 0) & (sub["age_years"] <= 110)]
     sub = sub.sample(min(20000, len(sub)), random_state=42)
     pal = {"Serious": "#c0392b", "Non-Serious": "#0583F2"}
+    xlabel = "Age (years)" if method == "Raw" else f"Age  {method}"
     with plt.rc_context(_RC):
         fig, ax = plt.subplots(figsize=(5.8, 3.4))
         for label, color in pal.items():
-            vals = sub[sub["serious_label"] == label]["age_years"]
+            vals = sub[sub["serious_label"] == label]["age_years"].values
+            vals = _apply_norm(vals, method)
             sns.kdeplot(vals, ax=ax, label=label, color=color,
                         linewidth=2.2, fill=True, alpha=0.22)
-        ax.set_xlabel("Age (years)", fontsize=10)
+        ax.set_xlabel(xlabel, fontsize=10)
         ax.set_ylabel("Density", fontsize=10)
-        ax.set_title("Age KDE: Serious vs Non-Serious", fontsize=11,
+        ax.set_title(f"Age KDE: Serious vs Non-Serious  [{method}]", fontsize=11,
                      fontweight="bold", color="#0D0D0D")
         ax.legend(fontsize=9)
         fig.tight_layout()
@@ -181,7 +234,7 @@ def _seaborn_boxplot_img() -> str:
         )
         ax.set_xlabel("")
         ax.set_ylabel("Value", fontsize=10)
-        ax.set_title("Box Plots — Outlier Detection (IQR Method)", fontsize=11,
+        ax.set_title("Box Plots  Outlier Detection (IQR Method)", fontsize=11,
                      fontweight="bold", color="#0D0D0D")
         fig.tight_layout()
     return _mpl_to_img(fig)
@@ -213,14 +266,14 @@ def _weight_dist_img() -> str:
         axes[1].set_ylabel("Density", fontsize=10)
         axes[1].set_title("Log-Transformed Weight", fontsize=10,
                            fontweight="bold", color="#0D0D0D")
-        fig.suptitle("Patient Weight — Raw vs Log Transform", fontsize=11,
+        fig.suptitle("Patient Weight  Raw vs Log Transform", fontsize=11,
                      fontweight="bold", color="#0D0D0D", y=1.01)
         fig.tight_layout()
     return _mpl_to_img(fig)
 
 
 def _swarm_img() -> str:
-    """Swarm plot — individual points distributed without overlap (small sample required)."""
+    """Swarm plot  individual points distributed without overlap (small sample required)."""
     sub = _DF[["seriousness_score", "sex_label"]].dropna()
     sub = sub[sub["sex_label"].isin(["Female", "Male"])]
     sub = sub.sample(min(400, len(sub)), random_state=42)
@@ -236,14 +289,14 @@ def _swarm_img() -> str:
             )
             ax.set_xlabel("")
             ax.set_ylabel("Seriousness Score", fontsize=10)
-            ax.set_title("Swarm Plot — Seriousness Score by Sex", fontsize=11,
+            ax.set_title("Swarm Plot  Seriousness Score by Sex", fontsize=11,
                          fontweight="bold", color="#0D0D0D")
             fig.tight_layout()
         return _mpl_to_img(fig)
 
 
 def _boxen_img() -> str:
-    """Boxen (letter-value) plot — reveals tail shape better than a standard box plot."""
+    """Boxen (letter-value) plot  reveals tail shape better than a standard box plot."""
     sub = _DF[["age_years", "agegrp_label"]].dropna()
     sub = sub[(sub["age_years"] >= 0) & (sub["age_years"] <= 110)]
     sub = sub.sample(min(20000, len(sub)), random_state=42)
@@ -265,7 +318,7 @@ def _boxen_img() -> str:
             )
         ax.set_xlabel("Age Group", fontsize=10)
         ax.set_ylabel("Age (years)", fontsize=10)
-        ax.set_title("Boxen (Letter-Value) Plot — Age Distribution by Age Group",
+        ax.set_title("Boxen (Letter-Value) Plot  Age Distribution by Age Group",
                      fontsize=11, fontweight="bold", color="#0D0D0D")
         fig.tight_layout()
     return _mpl_to_img(fig)
@@ -429,51 +482,83 @@ def _zscore_fig(field: str = "patientweight") -> go.Figure:
         yaxis=dict(title="Z-Score"),
         legend=dict(orientation="h", x=0, y=1.12, font_size=10),
         margin=dict(l=10, r=10, t=10, b=10),
-        annotations=[dict(
-            text=f"Shown sample — outliers (|z|>3) in plot: {n_ext}",
-            x=0.98, y=0.04, xref="paper", yref="paper",
-            showarrow=False, font=dict(size=10, color="#64748b"),
-            xanchor="right",
-        )],
     )
     return fig
 
 
-def _normalization_fig(field: str = "age_years") -> go.Figure:
+_NORM_TRANSFORMS = {
+    "Min-Max [0,1]": lambda v, mn, mx, mu, sd: (v - mn) / (mx - mn + 1e-9),
+    "Z-Score":       lambda v, mn, mx, mu, sd: (v - mu) / (sd + 1e-9),
+    "Log (x+1)":     lambda v, mn, mx, mu, sd: np.log1p(v),
+}
+_NORM_COLORS      = {"Min-Max [0,1]": GREEN,                    "Z-Score": PURPLE,                   "Log (x+1)": ORANGE}
+_NORM_FILL_COLORS = {"Min-Max [0,1]": "rgba(106,213,161,0.15)", "Z-Score": "rgba(139,92,246,0.15)", "Log (x+1)": "rgba(251,146,60,0.15)"}
+
+
+def _normalization_fig(field: str = "age_years", method: str = "Min-Max [0,1]") -> go.Figure:
     raw = _DF[field].dropna()
     cap = float(raw.quantile(0.99))
-    raw = raw[raw <= cap].sample(min(15000, len(raw)), random_state=42)
+    raw = raw[raw <= cap].sample(min(15000, len(raw)), random_state=42).values.astype(float)
     mn, mx = float(raw.min()), float(raw.max())
     mu, sd = float(raw.mean()), float(raw.std())
 
-    transforms = {
-        "Raw":            raw.values,
-        "Min-Max [0,1]":  (raw.values - mn) / (mx - mn + 1e-9),
-        "Z-Score":        (raw.values - mu) / (sd + 1e-9),
-        "Log (x+1)":      np.log1p(raw.values),
-    }
-    colors = [BLUE, GREEN, PURPLE, ORANGE]
+    fn         = _NORM_TRANSFORMS.get(method, _NORM_TRANSFORMS["Min-Max [0,1]"])
+    line_color = _NORM_COLORS.get(method, GREEN)
+    fill_color = _NORM_FILL_COLORS.get(method, "rgba(106,213,161,0.15)")
 
-    fig = go.Figure()
-    for (name, vals), color in zip(transforms.items(), colors):
-        fig.add_trace(go.Histogram(
-            x=vals.tolist(), name=name,
-            marker_color=color, opacity=0.58, nbinsx=55,
+    # Smooth curve over the raw x range for the line
+    x_smooth    = np.linspace(mn, mx, 400)
+    norm_smooth = fn(x_smooth, mn, mx, mu, sd)
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # Bars  raw distribution on primary y-axis
+    fig.add_trace(
+        go.Histogram(
+            x=raw.tolist(),
+            name="Raw Distribution",
+            marker_color=BLUE,
+            opacity=0.70,
+            nbinsx=50,
             histnorm="probability density",
-            hovertemplate=f"<b>{name}</b><br>Bin: %{{x:.3f}}<br>Density: %{{y:.5f}}<extra></extra>",
-        ))
+            hovertemplate="<b>Raw</b><br>Value: %{x:.2f}<br>Density: %{y:.5f}<extra></extra>",
+        ),
+        secondary_y=False,
+    )
+
+    # Line  normalized curve on secondary y-axis
+    fig.add_trace(
+        go.Scatter(
+            x=x_smooth.tolist(),
+            y=norm_smooth.tolist(),
+            name=method,
+            mode="lines",
+            line=dict(color=line_color, width=2.5),
+            fill="tozeroy",
+            fillcolor=fill_color,
+            hovertemplate=f"<b>{method}</b><br>Raw: %{{x:.2f}}<br>Normalized: %{{y:.3f}}<extra></extra>",
+        ),
+        secondary_y=True,
+    )
+
+    fig.update_xaxes(title_text=field.replace("_", " ").title())
+    fig.update_yaxes(title_text="Raw Density",      secondary_y=False,
+                     title_font=dict(color=BLUE),   tickfont=dict(color=BLUE))
+    fig.update_yaxes(title_text=f"{method} Value",  secondary_y=True,
+                     title_font=dict(color=line_color), tickfont=dict(color=line_color),
+                     showgrid=False)
+
     fig.update_layout(
-        height=310, template=CHART_T, barmode="overlay",
-        xaxis=dict(title="Value"),
-        yaxis=dict(title="Probability Density"),
+        height=340,
+        template=CHART_T,
         legend=dict(orientation="h", x=0, y=1.12, font_size=10),
-        margin=dict(l=10, r=10, t=30, b=10),
+        margin=dict(l=10, r=55, t=30, b=10),
     )
     return fig
 
 
 def _strip_fig(field: str = "seriousness_score", group: str = "sex_label") -> go.Figure:
-    """Strip plot — individual records scattered per category with jitter showing density."""
+    """Strip plot  individual records scattered per category with jitter showing density."""
     df = _DF[[field, group]].dropna()
     cap = float(df[field].quantile(0.99))
     df  = df[df[field] <= cap].sample(min(8000, len(df)), random_state=42)
@@ -502,7 +587,7 @@ def _strip_fig(field: str = "seriousness_score", group: str = "sex_label") -> go
 
 
 def _regplot_fig(field: str = "age_years") -> go.Figure:
-    """OLS regression scatter — fit line + 95% confidence band + Pearson r annotation."""
+    """OLS regression scatter  fit line + 95% confidence band + Pearson r annotation."""
     df = _DF[[field, "seriousness_score"]].dropna()
     cap = float(df[field].quantile(0.99))
     df  = df[df[field] <= cap].sample(min(5000, len(df)), random_state=42)
@@ -555,58 +640,165 @@ def _regplot_fig(field: str = "age_years") -> go.Figure:
     return fig
 
 
-# ── Plotly static pre-computed charts ────────────────────────────────────────
+# ── Seaborn jointplot replacements (hexbin + KDE contour) ────────────────────
 
-def _hexbin_fig() -> go.Figure:
-    """2D histogram (hexbin) — age vs weight, cell color = record count."""
+def _hexbin_img() -> str:
+    """Seaborn jointplot (hex)  age vs weight with marginal histograms."""
     df = _DF[["age_years", "patientweight"]].dropna()
-    df = df[(df["age_years"] >= 0) & (df["age_years"] <= 110)]
-    df = df[(df["patientweight"] > 0) & (df["patientweight"] <= 200)]
-    df = df.sample(min(30000, len(df)), random_state=42)
-    fig = go.Figure(go.Histogram2d(
-        x=df["age_years"].tolist(),
-        y=df["patientweight"].tolist(),
-        colorscale=[[0, "#DADDE9"], [0.4, "#668CD9"], [0.7, "#0583F2"], [1, "#295591"]],
-        nbinsx=50, nbinsy=50,
-        colorbar=dict(title="Count", thickness=14, len=0.7),
-        hovertemplate="Age: %{x:.0f} yrs<br>Weight: %{y:.0f} kg<br>Count: %{z:,}<extra></extra>",
-    ))
-    fig.update_layout(
-        height=360, template=CHART_T,
-        xaxis=dict(title="Age (years)"),
-        yaxis=dict(title="Patient Weight (kg)"),
-        margin=dict(l=10, r=10, t=10, b=10),
-    )
-    return fig
+    df = df[(df["age_years"] >= 5) & (df["age_years"] <= 95)]
+    df = df[(df["patientweight"] >= 25) & (df["patientweight"] <= 160)]
+    df = df.sample(min(20000, len(df)), random_state=42)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with plt.rc_context({**_RC, "axes.facecolor": "#f5f6fc",
+                             "figure.facecolor": "white"}):
+            g = sns.jointplot(
+                data=df, x="age_years", y="patientweight",
+                kind="hex",
+                color="#0583F2",
+                height=5.8,
+                ratio=6,
+                marginal_kws=dict(bins=45, fill=True, color="#668CD9", alpha=0.7),
+                joint_kws=dict(gridsize=35, cmap="Blues"),
+            )
+            g.set_axis_labels("Age (years)", "Patient Weight (kg)", fontsize=10)
+            g.figure.suptitle("Hexbin  Age vs Patient Weight",
+                              fontsize=11, fontweight="bold", color="#0D0D0D", y=1.01)
+            g.figure.tight_layout()
+    return _mpl_to_img(g.figure)
 
 
-def _contour_fig() -> go.Figure:
-    """2D contour density — age vs weight, contour fill by density."""
-    df = _DF[["age_years", "patientweight"]].dropna()
-    df = df[(df["age_years"] >= 0) & (df["age_years"] <= 110)]
-    df = df[(df["patientweight"] > 0) & (df["patientweight"] <= 200)]
-    df = df.sample(min(30000, len(df)), random_state=42)
-    fig = go.Figure(go.Histogram2dContour(
-        x=df["age_years"].tolist(),
-        y=df["patientweight"].tolist(),
-        colorscale=[[0, "#F2F2F2"], [0.5, "#668CD9"], [1, "#295591"]],
-        nbinsx=40, nbinsy=40,
-        contours=dict(coloring="heatmap", showlabels=True,
-                      labelfont=dict(size=9, color="white")),
-        colorbar=dict(title="Density", thickness=14, len=0.7),
-        hovertemplate="Age: %{x:.0f} yrs<br>Weight: %{y:.0f} kg<extra></extra>",
-    ))
-    fig.update_layout(
-        height=360, template=CHART_T,
-        xaxis=dict(title="Age (years)"),
-        yaxis=dict(title="Patient Weight (kg)"),
-        margin=dict(l=10, r=10, t=10, b=10),
-    )
-    return fig
+def _contour_kde_img() -> str:
+    """Seaborn jointplot (kde)  smoothed density contours with marginal KDEs."""
+    df = _DF[["age_years", "patientweight", "serious_label"]].dropna()
+    df = df[(df["age_years"] >= 5) & (df["age_years"] <= 95)]
+    df = df[(df["patientweight"] >= 25) & (df["patientweight"] <= 150)]
+    df = df.sample(min(15000, len(df)), random_state=42)
+    pal = {"Serious": "#CA896D", "Non-Serious": "#0583F2"}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with plt.rc_context({**_RC, "axes.facecolor": "#f5f6fc",
+                             "figure.facecolor": "white"}):
+            fig, ax = plt.subplots(figsize=(6, 5))
+            for label, color in pal.items():
+                sub = df[df["serious_label"] == label]
+                sns.kdeplot(
+                    data=sub, x="age_years", y="patientweight",
+                    ax=ax, color=color, fill=True, alpha=0.25,
+                    levels=6, linewidths=1.5, label=label,
+                )
+            ax.set_xlabel("Age (years)", fontsize=10)
+            ax.set_ylabel("Patient Weight (kg)", fontsize=10)
+            ax.set_title("2D KDE Contour  Age vs Weight by Seriousness",
+                         fontsize=11, fontweight="bold", color="#0D0D0D")
+            ax.legend(fontsize=9)
+            fig.tight_layout()
+    return _mpl_to_img(fig)
+
+
+def _scatter_subplots_img() -> str:
+    """2×2 scatter subplot grid  age vs weight from four different grouping perspectives."""
+    cols = ["age_years", "patientweight", "sex_label", "serious_label",
+            "num_drugs", "num_reactions", "seriousness_score"]
+    df = _DF[cols].dropna()
+    df = df[(df["age_years"] >= 0) & (df["age_years"] <= 100)]
+    df = df[(df["patientweight"] >= 20) & (df["patientweight"] <= 160)]
+    df = df.sample(min(6000, len(df)), random_state=42)
+
+    with plt.rc_context(_RC):
+        fig, axes = plt.subplots(2, 2, figsize=(11, 8))
+
+        # Top-left: Age vs Weight by Sex
+        pal_sex = {"Female": "#A36378", "Male": "#0583F2", "Unknown": "#BFC7D9"}
+        for sex, color in pal_sex.items():
+            sub = df[df["sex_label"] == sex]
+            axes[0, 0].scatter(sub["age_years"], sub["patientweight"],
+                               c=color, alpha=0.22, s=7, label=sex, rasterized=True)
+        axes[0, 0].set_xlabel("Age (years)", fontsize=9)
+        axes[0, 0].set_ylabel("Weight (kg)", fontsize=9)
+        axes[0, 0].set_title("Age vs Weight  by Sex", fontsize=10, fontweight="bold", color="#0D0D0D")
+        axes[0, 0].legend(fontsize=8, markerscale=2.5, framealpha=0.7)
+
+        # Top-right: Age vs Weight by Seriousness
+        pal_ser = {"Serious": "#CA896D", "Non-Serious": "#0583F2"}
+        for label, color in pal_ser.items():
+            sub = df[df["serious_label"] == label]
+            axes[0, 1].scatter(sub["age_years"], sub["patientweight"],
+                               c=color, alpha=0.22, s=7, label=label, rasterized=True)
+        axes[0, 1].set_xlabel("Age (years)", fontsize=9)
+        axes[0, 1].set_ylabel("Weight (kg)", fontsize=9)
+        axes[0, 1].set_title("Age vs Weight  by Seriousness", fontsize=10, fontweight="bold", color="#0D0D0D")
+        axes[0, 1].legend(fontsize=8, markerscale=2.5, framealpha=0.7)
+
+        # Bottom-left: Num Drugs vs Num Reactions, color = seriousness score
+        sc = axes[1, 0].scatter(
+            df["num_drugs"], df["num_reactions"],
+            c=df["seriousness_score"], cmap="Blues_r",
+            alpha=0.3, s=7, vmin=0, vmax=6, rasterized=True,
+        )
+        plt.colorbar(sc, ax=axes[1, 0], label="Seriousness Score", shrink=0.85)
+        axes[1, 0].set_xlabel("Number of Drugs", fontsize=9)
+        axes[1, 0].set_ylabel("Number of Reactions", fontsize=9)
+        axes[1, 0].set_title("Drugs vs Reactions  colored by Seriousness", fontsize=10, fontweight="bold", color="#0D0D0D")
+
+        # Bottom-right: Age vs Seriousness Score + OLS line
+        x_vals = df["age_years"].values
+        y_vals = df["seriousness_score"].values
+        axes[1, 1].scatter(x_vals, y_vals, c="#668CD9", alpha=0.18, s=7, rasterized=True)
+        m, b = np.polyfit(x_vals, y_vals, 1)
+        x_line = np.linspace(x_vals.min(), x_vals.max(), 200)
+        axes[1, 1].plot(x_line, m * x_line + b, color="#c0392b", linewidth=2.2,
+                        label=f"OLS  slope={m:.4f}")
+        axes[1, 1].set_xlabel("Age (years)", fontsize=9)
+        axes[1, 1].set_ylabel("Seriousness Score", fontsize=9)
+        axes[1, 1].set_title("Age vs Seriousness Score + Regression", fontsize=10, fontweight="bold", color="#0D0D0D")
+        axes[1, 1].legend(fontsize=8, framealpha=0.7)
+
+        fig.suptitle("Multivariate Scatter Subplots", fontsize=13,
+                     fontweight="bold", color="#0D0D0D", y=1.01)
+        fig.tight_layout()
+    return _mpl_to_img(fig)
+
+
+def _hist_grid_img() -> str:
+    """Seaborn histogram + KDE grid for all numeric variables."""
+    field_cfg = [
+        ("age_years",            "Age (years)",          "#0583F2"),
+        ("patientweight",        "Patient Weight (kg)",  "#A36378"),
+        ("num_drugs",            "Number of Drugs",      "#295591"),
+        ("num_reactions",        "Number of Reactions",  "#CA896D"),
+        ("seriousness_score",    "Seriousness Score",    "#668CD9"),
+        ("seriousnessdeath_flag","Death Flag (0/1)",     "#c0392b"),
+    ]
+    df = _DF[[f for f, _, _ in field_cfg]].dropna()
+    df = df.sample(min(20000, len(df)), random_state=42)
+
+    with plt.rc_context(_RC):
+        fig, axes = plt.subplots(2, 3, figsize=(13, 7))
+        for ax, (col, label, color) in zip(axes.flatten(), field_cfg):
+            data = df[col]
+            cap  = float(data.quantile(0.99))
+            data = data[data <= cap]
+            sns.histplot(data, ax=ax, color=color, alpha=0.6, bins=40, kde=True)
+            # thicken the KDE line drawn on top
+            for line in ax.lines:
+                line.set_linewidth(1.4)
+                line.set_color("#0D0D0D")
+            ax.set_xlabel(label, fontsize=9)
+            ax.set_ylabel("Count", fontsize=9)
+            ax.set_title(f"{label}", fontsize=10, fontweight="bold", color="#0D0D0D")
+            mean_val = float(data.mean())
+            ax.axvline(mean_val, color="#c0392b", linestyle="--",
+                       linewidth=1.4, label=f"mean={mean_val:.1f}")
+            ax.legend(fontsize=7.5, framealpha=0.7)
+        fig.suptitle("Variable Distributions  Histogram + KDE",
+                     fontsize=13, fontweight="bold", color="#0D0D0D", y=1.01)
+        fig.tight_layout()
+    return _mpl_to_img(fig)
 
 
 def _scatter3d_fig() -> go.Figure:
-    """3D scatter — age × weight × seriousness_score, color = serious/non-serious."""
+    """3D scatter  age × weight × seriousness_score, color = serious/non-serious."""
     df = _DF[["age_years", "patientweight", "seriousness_score", "serious_label"]].dropna()
     df = df[(df["age_years"] >= 0) & (df["age_years"] <= 110)]
     df = df[(df["patientweight"] > 0) & (df["patientweight"] <= 200)]
@@ -664,17 +856,16 @@ def _kpi_cards():
 
 # ── Pre-compute static images + figures at import ─────────────────────────────
 
-_CORR_IMG    = _corr_heatmap_img()
-_KDE_SEX     = _kde_sex_img()
-_KDE_SER     = _kde_serious_img()
 _BOX_OUT     = _seaborn_boxplot_img()
 _WT_DIST     = _weight_dist_img()
 _SWARM_IMG   = _swarm_img()
 _BOXEN_IMG   = _boxen_img()
 
-_HEXBIN      = _hexbin_fig()
-_CONTOUR     = _contour_fig()
-_SCATTER3D   = _scatter3d_fig()
+_HEXBIN_IMG      = _hexbin_img()
+_CONTOUR_IMG     = _contour_kde_img()
+_SCATTER_SUB     = _scatter_subplots_img()
+_HIST_GRID       = _hist_grid_img()
+_SCATTER3D       = _scatter3d_fig()
 
 
 # ── Callbacks ─────────────────────────────────────────────────────────────────
@@ -686,7 +877,6 @@ def register_callbacks(app):
         Output("an-qq-chart",      "figure"),
         Output("an-outlier-chart", "figure"),
         Output("an-zscore-chart",  "figure"),
-        Output("an-norm-chart",    "figure"),
         Output("an-strip-chart",   "figure"),
         Output("an-reg-chart",     "figure"),
         Input("an-field-select",   "value"),
@@ -700,10 +890,31 @@ def register_callbacks(app):
             _qqplot_fig(f),
             _outlier_iqr_fig(f),
             _zscore_fig(f),
-            _normalization_fig(f),
             _strip_fig(f, g),
             _regplot_fig(f),
         )
+
+    @app.callback(
+        Output("an-norm-chart", "figure"),
+        Input("an-field-select", "value"),
+        Input("an-norm-select",  "value"),
+    )
+    def _update_norm(field, method):
+        return _normalization_fig(field or "age_years", method or "Min-Max [0,1]")
+
+    @app.callback(
+        Output("an-kde-sex-img", "src"),
+        Input("an-kde-sex-norm", "value"),
+    )
+    def _update_kde_sex(method):
+        return _kde_sex_img(method or "Raw")
+
+    @app.callback(
+        Output("an-kde-ser-img", "src"),
+        Input("an-kde-ser-norm", "value"),
+    )
+    def _update_kde_ser(method):
+        return _kde_serious_img(method or "Raw")
 
     @app.callback(
         Output("an-field-select", "value"),
@@ -742,7 +953,7 @@ def layout() -> html.Div:
                        "border": "1px solid #BFC7D9", "color": "#295591"},
             ),
             html.Div(
-                "Select a variable — histogram, QQ, outlier, z-score, normalization, strip, and regression charts update",
+                "12 numeric fields · 7 group variables  all interactive charts update on selection",
                 style={"fontSize": "11px", "color": "#94a3b8",
                        "display": "flex", "alignItems": "center"},
             ),
@@ -756,7 +967,7 @@ def layout() -> html.Div:
             dbc.Col(
                 viz_card(
                     "Histogram with Rug Plot",
-                    "Distribution of selected variable — rug marks show individual records; color = group",
+                    "Distribution of selected variable  rug marks show individual records; color = group",
                     graph(_hist_rug_fig(), 380, graph_id="an-hist-chart"),
                 ),
                 md=12,
@@ -768,16 +979,27 @@ def layout() -> html.Div:
             dbc.Col(
                 viz_card(
                     "Q-Q Plot (Normal)",
-                    "Sample quantiles vs theoretical — points on the diagonal = normally distributed",
-                    graph(_qqplot_fig(), 310, graph_id="an-qq-chart"),
+                    "Sample quantiles vs theoreticalpoi nts on the diagonal = normally distributed",
+                    graph(_qqplot_fig(), 360, graph_id="an-qq-chart"),
                 ),
                 md=6,
             ),
             dbc.Col(
                 viz_card(
                     "Normalization Comparison",
-                    "Raw · Min-Max [0,1] · Z-Score · Log(x+1) — overlaid probability densities",
-                    graph(_normalization_fig(), 310, graph_id="an-norm-chart"),
+                    "Top: raw distribution (bars) · Bottom: normalized values (line)",
+                    dbc.Select(
+                        id="an-norm-select",
+                        options=[
+                            {"label": "Min-Max [0,1]", "value": "Min-Max [0,1]"},
+                            {"label": "Z-Score",       "value": "Z-Score"},
+                            {"label": "Log (x+1)",     "value": "Log (x+1)"},
+                        ],
+                        value="Min-Max [0,1]",
+                        style={"fontSize": "13px", "marginBottom": "10px",
+                               "border": "1px solid #BFC7D9", "borderRadius": "8px"},
+                    ),
+                    graph(_normalization_fig(), 340, graph_id="an-norm-chart"),
                 ),
                 md=6,
             ),
@@ -787,7 +1009,7 @@ def layout() -> html.Div:
         dbc.Row([
             dbc.Col(
                 viz_card(
-                    "Outlier Detection — IQR Method",
+                    "Outlier Detection  IQR Method",
                     "Box plot with IQR fence; red × marks = outliers beyond 1.5 × IQR",
                     graph(_outlier_iqr_fig(), 310, graph_id="an-outlier-chart"),
                 ),
@@ -796,7 +1018,7 @@ def layout() -> html.Div:
             dbc.Col(
                 viz_card(
                     "Z-Score Outlier Scatter",
-                    "Each point is a record — red circles = |z| > 3σ (extreme outliers)",
+                    "Each point is a record red circles = |z| > 3σ (extreme outliers)",
                     graph(_zscore_fig(), 310, graph_id="an-zscore-chart"),
                 ),
                 md=6,
@@ -808,7 +1030,7 @@ def layout() -> html.Div:
             dbc.Col(
                 viz_card(
                     "Strip Plot",
-                    "Individual records scattered per group — jitter reveals density at each level",
+                    "Individual records scattered per group  jitter reveals density at each level",
                     graph(_strip_fig(), 340, graph_id="an-strip-chart"),
                 ),
                 md=5,
@@ -816,30 +1038,54 @@ def layout() -> html.Div:
             dbc.Col(
                 viz_card(
                     "Regression Plot (OLS)",
-                    "Scatter + OLS fit line + 95% confidence band — Pearson r annotated",
+                    "Scatter + OLS fit line + 95% confidence band  Pearson r annotated",
                     graph(_regplot_fig(), 340, graph_id="an-reg-chart"),
                 ),
                 md=7,
             ),
         ], class_name="g-3 row-gap"),
 
-        # ── Row 5: Hexbin + Contour (static pre-computed) ─────────────────────
+        # ── Row 5: Hexbin + KDE Contour (seaborn jointplots) ─────────────────
         dbc.Row([
             dbc.Col(
-                viz_card(
-                    "Hexbin Plot — Age vs Weight",
-                    "2D histogram: cell color = count of records in that age × weight bin",
-                    graph(_HEXBIN, 360, graph_id="an-hexbin-chart"),
+                _img_card(
+                    "Hexbin  Age vs Weight  (seaborn)",
+                    "Cell darkness = record density; marginal histograms on each axis",
+                    _HEXBIN_IMG, height=420,
                 ),
                 md=6,
             ),
             dbc.Col(
-                viz_card(
-                    "Contour Density — Age vs Weight",
-                    "Smoothed 2D density contours — darker fill = higher record concentration",
-                    graph(_CONTOUR, 360, graph_id="an-contour-chart"),
+                _img_card(
+                    "2D KDE Contour  Age vs Weight  (seaborn)",
+                    "Smoothed density contours  Serious vs Non-Serious overlaid",
+                    _CONTOUR_IMG, height=420,
                 ),
                 md=6,
+            ),
+        ], class_name="g-3 row-gap"),
+
+        # ── Row 5b: Scatter subplots ──────────────────────────────────────────
+        dbc.Row([
+            dbc.Col(
+                _img_card(
+                    "Multivariate Scatter Subplots  (matplotlib)",
+                    "Age×Weight by Sex · by Seriousness · Drugs×Reactions by score · Age×Score + OLS",
+                    _SCATTER_SUB, height=780
+                ),
+                md=12,
+            ),
+        ], class_name="g-3 row-gap"),
+
+        # ── Row 5c: Histogram + KDE grid ─────────────────────────────────────
+        dbc.Row([
+            dbc.Col(
+                _img_card(
+                    "Variable Distributions  Histogram + KDE  (seaborn)",
+                    "All numeric fields with KDE overlay and mean line  capped at 99th percentile",
+                    _HIST_GRID, height=780,
+                ),
+                md=12,
             ),
         ], class_name="g-3 row-gap"),
 
@@ -847,29 +1093,55 @@ def layout() -> html.Div:
         dbc.Row([
             dbc.Col(
                 viz_card(
-                    "3D Scatter — Age × Weight × Seriousness Score",
-                    "Each point is a sampled report — color = serious / non-serious; drag to rotate",
+                    "3D Scatter  Age × Weight × Seriousness Score",
+                    "Each point is a sampled report  color = serious / non-serious; drag to rotate",
                     graph(_SCATTER3D, 440, graph_id="an-scatter3d-chart"),
                 ),
                 md=12,
             ),
         ], class_name="g-3 row-gap"),
 
-        # ── Row 7: Seaborn KDE plots (static) ────────────────────────────────
+        # ── Row 7: Seaborn KDE plots (interactive normalization) ─────────────
         dbc.Row([
             dbc.Col(
-                _img_card(
+                viz_card(
                     "Age KDE by Sex  (seaborn)",
-                    "Kernel density estimate — Female vs Male age distribution",
-                    _KDE_SEX, height=310,
+                    "Kernel density estimate  Female vs Male · select normalization",
+                    dbc.Select(
+                        id="an-kde-sex-norm",
+                        options=_KDE_NORM_OPTS,
+                        value="Raw",
+                        style={"fontSize": "13px", "marginBottom": "10px",
+                               "border": "1px solid #BFC7D9", "borderRadius": "8px"},
+                    ),
+                    html.Img(
+                        id="an-kde-sex-img",
+                        src=_kde_sex_img("Raw"),
+                        style={"width": "100%", "borderRadius": "6px",
+                               "display": "block", "height": "310px",
+                               "objectFit": "contain"},
+                    ),
                 ),
                 md=6,
             ),
             dbc.Col(
-                _img_card(
+                viz_card(
                     "Age KDE: Serious vs Non-Serious  (seaborn)",
-                    "Density shape of patient age for serious vs non-serious reports",
-                    _KDE_SER, height=310,
+                    "Density shape of patient age  serious vs non-serious · select normalization",
+                    dbc.Select(
+                        id="an-kde-ser-norm",
+                        options=_KDE_NORM_OPTS,
+                        value="Raw",
+                        style={"fontSize": "13px", "marginBottom": "10px",
+                               "border": "1px solid #BFC7D9", "borderRadius": "8px"},
+                    ),
+                    html.Img(
+                        id="an-kde-ser-img",
+                        src=_kde_serious_img("Raw"),
+                        style={"width": "100%", "borderRadius": "6px",
+                               "display": "block", "height": "310px",
+                               "objectFit": "contain"},
+                    ),
                 ),
                 md=6,
             ),
@@ -879,15 +1151,15 @@ def layout() -> html.Div:
         dbc.Row([
             dbc.Col(
                 _img_card(
-                    "Swarm Plot — Seriousness Score by Sex  (seaborn)",
-                    "Non-overlapping points reveal distribution shape — sampled to n=1,500",
+                    "Swarm Plot  Seriousness Score by Sex  (seaborn)",
+                    "Non-overlapping points reveal distribution shape  sampled to n=1,500",
                     _SWARM_IMG, height=320,
                 ),
                 md=5,
             ),
             dbc.Col(
                 _img_card(
-                    "Boxen (Letter-Value) Plot — Age by Age Group  (seaborn)",
+                    "Boxen (Letter-Value) Plot  Age by Age Group  (seaborn)",
                     "Letter-value plot shows distributional tails at multiple probability levels",
                     _BOXEN_IMG, height=320,
                 ),
@@ -899,29 +1171,29 @@ def layout() -> html.Div:
         dbc.Row([
             dbc.Col(
                 _img_card(
-                    "Box Plots — All Numeric Variables  (seaborn)",
-                    "Age · Weight · Num Drugs · Num Reactions — fliers are IQR outliers",
+                    "Box Plots  All Numeric Variables  (seaborn)",
+                    "Age · Weight · Num Drugs · Num Reactions  fliers are IQR outliers",
                     _BOX_OUT, height=320,
                 ),
                 md=7,
             ),
             dbc.Col(
                 _img_card(
-                    "Patient Weight — Histogram + KDE + Rug  (matplotlib)",
-                    "Raw distribution and log-transformed — showing right skew and outliers",
+                    "Patient Weight  Histogram + KDE + Rug  (matplotlib)",
+                    "Raw distribution and log-transformed  showing right skew and outliers",
                     _WT_DIST, height=320,
                 ),
                 md=5,
             ),
         ], class_name="g-3 row-gap"),
 
-        # ── Row 10: Seaborn Correlation Heatmap ──────────────────────────────
+        # ── Row 10: Plotly Correlation Heatmap ───────────────────────────────
         dbc.Row([
             dbc.Col(
-                _img_card(
-                    "Pearson Correlation Matrix  (seaborn)",
-                    "Numeric variables: age · weight · num_drugs · num_reactions · seriousness_score",
-                    _CORR_IMG, height=360,
+                viz_card(
+                    "Pearson Correlation Matrix",
+                    "Red = positive · Blue = negative correlation",
+                    graph(_corr_heatmap_fig(), 600, graph_id="an-corr-heatmap"),
                 ),
                 md=12,
             ),

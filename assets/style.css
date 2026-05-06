@@ -304,7 +304,7 @@ body { margin: 0; overflow: hidden; background: var(--page-bg); }
   background: var(--card-bg);
   border-radius: var(--card-radius);
   box-shadow: var(--shadow-sm);
-  padding: 20px 20px 16px;
+  padding: 10px 20px;
   height: 100%;
   border: 1px solid var(--border);
   transition: box-shadow 0.2s;
