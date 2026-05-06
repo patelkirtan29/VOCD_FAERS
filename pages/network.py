@@ -275,14 +275,14 @@ def layout() -> html.Div:
             ),
         ], class_name="g-3 row-gap"),
 
-        dbc.Row([
-            dbc.Col(
-                viz_card("Drug → Reaction Flow (Sankey)",
-                         "Co-occurrence volume flowing from top drugs to top reactions",
-                         graph(_sankey_fig(_PAIRS), 420, graph_id="net-sankey-chart")),
-                md=12,
-            ),
-        ], class_name="g-3 row-gap"),
+        # dbc.Row([
+        #     dbc.Col(
+        #         viz_card("Drug → Reaction Flow (Sankey)",
+        #                  "Co-occurrence volume flowing from top drugs to top reactions",
+        #                  graph(_sankey_fig(_PAIRS), 420, graph_id="net-sankey-chart")),
+        #         md=12,
+        #     ),
+        # ], class_name="g-3 row-gap"),
 
         dbc.Row([
             dbc.Col(

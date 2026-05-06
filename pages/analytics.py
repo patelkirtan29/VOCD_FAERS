@@ -952,11 +952,6 @@ def layout() -> html.Div:
                        "padding": "8px 16px", "height": "38px",
                        "border": "1px solid #BFC7D9", "color": "#295591"},
             ),
-            html.Div(
-                "12 numeric fields · 7 group variables  all interactive charts update on selection",
-                style={"fontSize": "11px", "color": "#94a3b8",
-                       "display": "flex", "alignItems": "center"},
-            ),
         ], className="filter-row"),
 
         # KPI row

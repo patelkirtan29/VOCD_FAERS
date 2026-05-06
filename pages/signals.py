@@ -301,7 +301,7 @@ def layout() -> html.Div:
             dbc.Col(
                 viz_card("Serious vs Fatal Rate Scatter",
                          "Bubble size = report count · dashed lines = 50% serious / 5% fatal thresholds",
-                         graph(_scatter_fig(_SIG), 360, graph_id="sig-scatter-chart")),
+                         graph(_scatter_fig(_SIG), 410, graph_id="sig-scatter-chart")),
                 md=6,
             ),
         ], class_name="g-3 row-gap"),
