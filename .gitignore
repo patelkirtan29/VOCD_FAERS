@@ -4,3 +4,4 @@ __pycache__
 .venv
 testing.ipynb
 design_preview.html
+*.tex

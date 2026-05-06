@@ -126,7 +126,7 @@ def _role_fig(highlight: str = "all") -> go.Figure:
     total  = counts.sum()
     labels = counts.index.tolist()
     values = [round(v / total * 100, 1) for v in counts.values]
-    palette = ['#1f459', '#2b6ad0', '#68a4f1', '#061e47']
+    palette = ['#a36378', '#2b6ad0', '#68a4f1', '#061e47']
     colors  = [
         palette[i % len(palette)]
         if (highlight == "all" or lab == highlight) else "#e2e8f0"
