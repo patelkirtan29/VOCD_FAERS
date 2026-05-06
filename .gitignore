@@ -5,3 +5,4 @@ __pycache__
 testing.ipynb
 design_preview.html
 *.tex
+.DS_Store
