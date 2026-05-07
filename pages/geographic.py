@@ -115,6 +115,7 @@ def _top_states_fig(df: pd.DataFrame) -> go.Figure:
         yaxis=dict(showgrid=True, gridcolor="#EFEFEF", tickformat=",",
                    range=[0, top["reports"].max() * 1.18]),
         margin=dict(l=10, r=10, t=20, b=10),
+        xaxis_title="State", yaxis_title="Reports",
     )
     return fig
 

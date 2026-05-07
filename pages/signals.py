@@ -110,9 +110,8 @@ def _signal_bar_fig(df: pd.DataFrame, metric: str = "signal_score") -> go.Figure
     ))
     fig.update_layout(
         height=430, template=CHART_T,
-        xaxis=dict(showgrid=False, showticklabels=False,
-                   range=[0, max(values) * 1.22] if values else [0, 1]),
-        yaxis=dict(tickfont=dict(size=9, color="#0D0D0D"), automargin=True),
+        xaxis=dict(showgrid=False, showticklabels=False, title="Count"),
+        yaxis=dict(tickfont=dict(size=9, color="#0D0D0D"), automargin=True, title="Drug + Reaction"),
         margin=dict(l=10, r=10, t=10, b=10),
     )
     return fig

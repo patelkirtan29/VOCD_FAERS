@@ -162,7 +162,7 @@ def _age_group_fig(df: pd.DataFrame, group_by: str = "serious") -> go.Figure:
 
     fig.update_layout(
         height=310, template=CHART_T, barmode="stack",
-        xaxis=dict(tickfont=dict(size=11)),
+        xaxis=dict(tickfont=dict(size=11), title="Age Group"),
         yaxis=dict(title="Reports", tickformat=","),
         legend=dict(orientation="h", x=0, y=1.12, font_size=11),
         margin=dict(l=10, r=10, t=30, b=10),
@@ -242,7 +242,7 @@ def _fatal_by_age_fig(df: pd.DataFrame) -> go.Figure:
     ))
     fig.update_layout(
         height=270, template=CHART_T,
-        xaxis=dict(tickfont=dict(size=11)),
+        xaxis=dict(tickfont=dict(size=11), title="Age Group"),
         yaxis=dict(title="Fatal %", ticksuffix="%",
                    range=[0, grp["fatal_pct"].max() * 1.3]),
         margin=dict(l=10, r=10, t=10, b=10),
@@ -283,7 +283,7 @@ def _complexity_fig(df: pd.DataFrame) -> go.Figure:
     ))
     fig.update_layout(
         height=270, template=CHART_T, barmode="group",
-        xaxis=dict(tickfont=dict(size=11)),
+        xaxis=dict(tickfont=dict(size=11), title="Age Group"),
         yaxis=dict(title="Average Count"),
         legend=dict(orientation="h", x=0, y=1.12, font_size=11),
         margin=dict(l=10, r=10, t=30, b=10),

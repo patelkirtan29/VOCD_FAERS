@@ -112,7 +112,7 @@ def _score_dist_fig(df: pd.DataFrame) -> go.Figure:
     ))
     fig.update_layout(
         height=310, template=CHART_T,
-        xaxis=dict(tickfont=dict(size=10)),
+        xaxis=dict(tickfont=dict(size=10), title="Seriousness Score"),
         yaxis=dict(title="Reports", tickformat=",",
                    range=[0, counts["count"].max() * 1.18]),
         margin=dict(l=0, r=10, t=10, b=10),
@@ -120,13 +120,60 @@ def _score_dist_fig(df: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def _score_by_age_fig(df: pd.DataFrame) -> go.Figure:
+_AGG_LABELS = {"mean": "Avg", "median": "Median", "max": "Max"}
+
+
+def _score_by_age_fig(df: pd.DataFrame,
+                      agg: str = "mean",
+                      breakdown: str = "combined") -> go.Figure:
+    """Seriousness score per age group. agg ∈ {mean, median, max}; breakdown ∈ {combined, by_sex}."""
+    agg = agg if agg in _AGG_LABELS else "mean"
+    label_prefix = _AGG_LABELS[agg]
     known = df[df["agegrp_label"] != "Unknown"]
+
+    if breakdown == "by_sex":
+        sub = known[known["sex_label"].isin(["Female", "Male"])]
+        grp = (
+            sub.groupby(["agegrp_label", "sex_label"])["seriousness_score"]
+            .agg(agg).round(2).reset_index()
+        )
+        grp["agegrp_label"] = pd.Categorical(grp["agegrp_label"],
+                                             categories=_AGE_ORDER, ordered=True)
+        grp = grp.sort_values(["agegrp_label", "sex_label"])
+
+        fig = go.Figure()
+        for sex, color in [("Female", PINK), ("Male", BLUE)]:
+            s = grp[grp["sex_label"] == sex]
+            fig.add_trace(go.Bar(
+                name=sex,
+                x=s["agegrp_label"].astype(str).tolist(),
+                y=s["seriousness_score"].tolist(),
+                marker_color=color,
+                text=[f"{v:.2f}" for v in s["seriousness_score"].tolist()],
+                textposition="outside",
+                textfont=dict(size=9, color="#0D0D0D"),
+                hovertemplate=(
+                    f"<b>{sex}</b>  %{{x}}<br>"
+                    f"{label_prefix} score: %{{y:.2f}}<extra></extra>"
+                ),
+            ))
+        y_max = float(grp["seriousness_score"].max() or 0.1) * 1.25
+        fig.update_layout(
+            height=270, template=CHART_T, barmode="group",
+            xaxis=dict(tickfont=dict(size=11), title="Age Group"),
+            yaxis=dict(title=f"{label_prefix} Seriousness Score",
+                       range=[0, y_max]),
+            legend=dict(orientation="h", x=0, y=1.12, font_size=11),
+            margin=dict(l=10, r=10, t=30, b=10),
+        )
+        return fig
+
     grp = (
         known.groupby("agegrp_label")["seriousness_score"]
-        .mean().round(2).reset_index()
+        .agg(agg).round(2).reset_index()
     )
-    grp["agegrp_label"] = pd.Categorical(grp["agegrp_label"], categories=_AGE_ORDER, ordered=True)
+    grp["agegrp_label"] = pd.Categorical(grp["agegrp_label"],
+                                         categories=_AGE_ORDER, ordered=True)
     grp = grp.sort_values("agegrp_label")
 
     n = len(grp)
@@ -134,44 +181,67 @@ def _score_by_age_fig(df: pd.DataFrame) -> go.Figure:
     if n:
         colors[-1] = PURPLE
 
+    y_max = float(grp["seriousness_score"].max() or 0.1) * 1.25
     fig = go.Figure(go.Bar(
-        x=grp["agegrp_label"].tolist(),
+        x=grp["agegrp_label"].astype(str).tolist(),
         y=grp["seriousness_score"].tolist(),
         marker=dict(color=colors, line=dict(color="rgba(0,0,0,0)")),
         text=[f"{v:.2f}" for v in grp["seriousness_score"].tolist()],
         textposition="outside",
         textfont=dict(size=10, color="#0D0D0D"),
-        hovertemplate="<b>%{x}</b><br>Avg score: %{y:.2f}<extra></extra>",
+        hovertemplate=f"<b>%{{x}}</b><br>{label_prefix} score: %{{y:.2f}}<extra></extra>",
     ))
     fig.update_layout(
         height=270, template=CHART_T,
-        xaxis=dict(tickfont=dict(size=11)),
-        yaxis=dict(title="Avg Seriousness Score",
-                   range=[0, grp["seriousness_score"].max() * 1.25]),
+        xaxis=dict(tickfont=dict(size=11), title="Age Group"),
+        yaxis=dict(title=f"{label_prefix} Seriousness Score", range=[0, y_max]),
         margin=dict(l=10, r=10, t=10, b=10),
     )
     return fig
 
 
-def _score_by_sex_fig(df: pd.DataFrame) -> go.Figure:
+def _score_by_sex_fig(df: pd.DataFrame,
+                      age_group: str = "all",
+                      display_mode: str = "counts") -> go.Figure:
+    """Score distribution by sex. age_group ∈ {all} ∪ _AGE_ORDER; display_mode ∈ {counts, percent}."""
+    sub = df[df["sex_label"].isin(["Female", "Male"])]
+    if age_group != "all":
+        sub = sub[sub["agegrp_label"] == age_group]
+
     grp = (
-        df[df["sex_label"].isin(["Female", "Male"])]
-        .groupby(["sex_label", "seriousness_score"])
+        sub.groupby(["sex_label", "seriousness_score"])
         .size().reset_index(name="count")
     )
+
+    if display_mode == "percent":
+        totals = grp.groupby("sex_label")["count"].transform("sum")
+        grp["value"] = (grp["count"] / totals.replace(0, 1) * 100).round(2)
+        y_title = "Share within sex (%)"
+        y_fmt   = ".1f"
+        hover_val = "%{y:.2f}% (%{customdata:,} reports)"
+    else:
+        grp["value"] = grp["count"]
+        y_title = "Reports"
+        y_fmt   = ","
+        hover_val = "%{y:,} reports"
+
     fig = go.Figure()
     for sex, color in [("Female", PINK), ("Male", BLUE)]:
-        sub = grp[grp["sex_label"] == sex]
+        s = grp[grp["sex_label"] == sex]
         fig.add_trace(go.Bar(
-            name=sex, x=sub["seriousness_score"].tolist(),
-            y=sub["count"].tolist(),
+            name=sex,
+            x=s["seriousness_score"].tolist(),
+            y=s["value"].tolist(),
+            customdata=s["count"].tolist(),
             marker_color=color, opacity=0.85,
-            hovertemplate=f"<b>{sex}</b>  Score %{{x}}<br>%{{y:,}} reports<extra></extra>",
+            hovertemplate=f"<b>{sex}</b>  Score %{{x}}<br>{hover_val}<extra></extra>",
         ))
+
+    age_suffix = "" if age_group == "all" else f"  ({age_group})"
     fig.update_layout(
         height=270, template=CHART_T, barmode="group",
-        xaxis=dict(title="Seriousness Score", tickmode="linear"),
-        yaxis=dict(title="Reports", tickformat=","),
+        xaxis=dict(title=f"Seriousness Score{age_suffix}", tickmode="linear"),
+        yaxis=dict(title=y_title, tickformat=y_fmt),
         legend=dict(orientation="h", x=0, y=1.12, font_size=11),
         margin=dict(l=10, r=10, t=30, b=10),
     )
@@ -249,8 +319,8 @@ def _outcome_heatmap_fig(reac: pd.DataFrame, rpts: pd.DataFrame) -> go.Figure:
     ))
     fig.update_layout(
         height=280, template=CHART_T,
-        xaxis=dict(tickfont=dict(size=10)),
-        yaxis=dict(tickfont=dict(size=10), automargin=True),
+        xaxis=dict(tickfont=dict(size=10), title="Age Group"),
+        yaxis=dict(tickfont=dict(size=10), automargin=True, title="Outcome"),
         margin=dict(l=10, r=20, t=10, b=10),
     )
     return fig
@@ -258,14 +328,31 @@ def _outcome_heatmap_fig(reac: pd.DataFrame, rpts: pd.DataFrame) -> go.Figure:
 
 # ── Callbacks ─────────────────────────────────────────────────────────────────
 
+def _apply_global_filters(serious: str, sex: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Apply the page-level Seriousness + Sex filters to the report and reaction frames."""
+    df   = _RPTS.copy()
+    reac = _REAC.copy()
+    if serious == "serious":
+        keep = df[df["serious_label"] == "Serious"]["safetyreportid"]
+        df   = df[df["safetyreportid"].isin(keep)]
+        reac = reac[reac["safetyreportid"].isin(keep)]
+    elif serious == "fatal":
+        keep = df[df["fatal_label"] == "Fatal"]["safetyreportid"]
+        df   = df[df["safetyreportid"].isin(keep)]
+        reac = reac[reac["safetyreportid"].isin(keep)]
+    if sex and sex != "all":
+        keep = df[df["sex_label"] == sex]["safetyreportid"]
+        df   = df[df["safetyreportid"].isin(keep)]
+        reac = reac[reac["safetyreportid"].isin(keep)]
+    return df, reac
+
+
 def register_callbacks(app):
 
     @app.callback(
         Output("sev-kpi-row",       "children"),
         Output("sev-outcome-chart", "figure"),
         Output("sev-score-chart",   "figure"),
-        Output("sev-age-chart",     "figure"),
-        Output("sev-sex-chart",     "figure"),
         Output("sev-table-slot",    "children"),
         Output("sev-funnel-chart",  "figure"),
         Output("sev-heatmap-chart", "figure"),
@@ -273,42 +360,50 @@ def register_callbacks(app):
         Input("sev-sex-select",     "value"),
     )
     def _update(serious, sex):
-        df   = _RPTS.copy()
-        reac = _REAC.copy()
-
-        if serious == "serious":
-            keep = df[df["serious_label"] == "Serious"]["safetyreportid"]
-            df   = df[df["safetyreportid"].isin(keep)]
-            reac = reac[reac["safetyreportid"].isin(keep)]
-        elif serious == "fatal":
-            keep = df[df["fatal_label"] == "Fatal"]["safetyreportid"]
-            df   = df[df["safetyreportid"].isin(keep)]
-            reac = reac[reac["safetyreportid"].isin(keep)]
-
-        if sex and sex != "all":
-            keep = df[df["sex_label"] == sex]["safetyreportid"]
-            df   = df[df["safetyreportid"].isin(keep)]
-            reac = reac[reac["safetyreportid"].isin(keep)]
-
+        df, reac = _apply_global_filters(serious, sex)
         return (
             _kpi_cards(df),
             _outcome_fig(reac),
             _score_dist_fig(df),
-            _score_by_age_fig(df),
-            _score_by_sex_fig(df),
             _outcome_table(reac),
             _funnel_fig(df),
             _outcome_heatmap_fig(reac, df),
         )
 
     @app.callback(
-        Output("sev-serious-select", "value"),
-        Output("sev-sex-select",     "value"),
-        Input("sev-reset-btn",       "n_clicks"),
+        Output("sev-age-chart",      "figure"),
+        Input("sev-serious-select",  "value"),
+        Input("sev-sex-select",      "value"),
+        Input("sev-age-agg",         "value"),
+        Input("sev-age-breakdown",   "value"),
+    )
+    def _update_age_chart(serious, sex, agg, breakdown):
+        df, _ = _apply_global_filters(serious, sex)
+        return _score_by_age_fig(df, agg or "mean", breakdown or "combined")
+
+    @app.callback(
+        Output("sev-sex-chart",     "figure"),
+        Input("sev-serious-select", "value"),
+        Input("sev-sex-select",     "value"),
+        Input("sev-sex-age",        "value"),
+        Input("sev-sex-mode",       "value"),
+    )
+    def _update_sex_chart(serious, sex, age_group, mode):
+        df, _ = _apply_global_filters(serious, sex)
+        return _score_by_sex_fig(df, age_group or "all", mode or "counts")
+
+    @app.callback(
+        Output("sev-serious-select",  "value"),
+        Output("sev-sex-select",      "value"),
+        Output("sev-age-agg",         "value"),
+        Output("sev-age-breakdown",   "value"),
+        Output("sev-sex-age",         "value"),
+        Output("sev-sex-mode",        "value"),
+        Input("sev-reset-btn",        "n_clicks"),
         prevent_initial_call=True,
     )
     def _reset(_):
-        return "all", "all"
+        return "all", "all", "mean", "combined", "all", "counts"
 
 
 # ── Layout ────────────────────────────────────────────────────────────────────
@@ -358,15 +453,74 @@ def layout() -> html.Div:
 
         dbc.Row([
             dbc.Col(
-                viz_card("Avg Seriousness Score by Age Group",
-                         "Mean score across known-age patients  Unknown excluded",
-                         graph(_score_by_age_fig(_RPTS), 270, graph_id="sev-age-chart")),
+                viz_card(
+                    "Avg Seriousness Score by Age Group",
+                    "Pick aggregation + optional sex breakdown · Unknown age excluded",
+                    html.Div([
+                        dbc.RadioItems(
+                            id="sev-age-agg",
+                            options=[
+                                {"label": "Mean",   "value": "mean"},
+                                {"label": "Median", "value": "median"},
+                                {"label": "Max",    "value": "max"},
+                            ],
+                            value="mean",
+                            inline=True,
+                            inputClassName="me-1",
+                            labelClassName="me-3",
+                            style={"fontSize": "12.5px", "color": "#295591"},
+                        ),
+                        dbc.Select(
+                            id="sev-age-breakdown",
+                            options=[
+                                {"label": "Combined",     "value": "combined"},
+                                {"label": "Split by Sex", "value": "by_sex"},
+                            ],
+                            value="combined",
+                            style={"fontSize": "12px", "width": "150px",
+                                   "border": "1px solid #BFC7D9", "borderRadius": "6px",
+                                   "background": "#ffffff", "height": "30px"},
+                        ),
+                    ], style={"display": "flex", "gap": "16px",
+                              "alignItems": "center", "flexWrap": "wrap",
+                              "marginBottom": "8px"}),
+                    graph(_score_by_age_fig(_RPTS), 270, graph_id="sev-age-chart"),
+                ),
                 md=6,
             ),
             dbc.Col(
-                viz_card("Score Distribution by Sex",
-                         "Grouped bars comparing Female vs Male seriousness profiles",
-                         graph(_score_by_sex_fig(_RPTS), 270, graph_id="sev-sex-chart")),
+                viz_card(
+                    "Score Distribution by Sex",
+                    "Female vs Male profile · filter by age group · counts or % within sex",
+                    html.Div([
+                        dbc.Select(
+                            id="sev-sex-age",
+                            options=[
+                                {"label": "All Ages", "value": "all"},
+                                *[{"label": a, "value": a} for a in _AGE_ORDER],
+                            ],
+                            value="all",
+                            style={"fontSize": "12px", "width": "130px",
+                                   "border": "1px solid #BFC7D9", "borderRadius": "6px",
+                                   "background": "#ffffff", "height": "30px"},
+                        ),
+                        dbc.RadioItems(
+                            id="sev-sex-mode",
+                            options=[
+                                {"label": "Counts",  "value": "counts"},
+                                {"label": "Percent", "value": "percent"},
+                            ],
+                            value="counts",
+                            inline=True,
+                            inputClassName="me-1",
+                            labelClassName="me-3",
+                            style={"fontSize": "12.5px", "color": "#295591"},
+                        ),
+                    ], style={"display": "flex", "gap": "16px",
+                              "alignItems": "center", "flexWrap": "wrap",
+                              "marginBottom": "8px"}),
+                    graph(_score_by_sex_fig(_RPTS), 270, graph_id="sev-sex-chart"),
+                ),
                 md=6,
             ),
         ], class_name="g-3 row-gap"),

@@ -79,8 +79,8 @@ def _heatmap_fig(pairs: pd.DataFrame, metric: str = "count") -> go.Figure:
     ))
     fig.update_layout(
         height=400, template=CHART_T,
-        xaxis=dict(tickfont=dict(size=10), tickangle=-35, automargin=True),
-        yaxis=dict(tickfont=dict(size=10), automargin=True),
+        xaxis=dict(tickfont=dict(size=10), tickangle=-35, automargin=True, title="Reaction"),
+        yaxis=dict(tickfont=dict(size=10), automargin=True, title="Drug"),
         margin=dict(l=10, r=20, t=10, b=10),
     )
     return fig
@@ -105,8 +105,7 @@ def _top_pairs_fig(pairs: pd.DataFrame) -> go.Figure:
     ))
     fig.update_layout(
         height=420, template=CHART_T,
-        xaxis=dict(showgrid=False, showticklabels=False,
-                   range=[0, top["count"].max() * 1.22]),
+        xaxis=dict(showgrid=False, showticklabels=False, title="Co-occurrence Count"),
         yaxis=dict(tickfont=dict(size=9, color="#0D0D0D"), automargin=True),
         margin=dict(l=10, r=10, t=10, b=10),
     )
@@ -264,7 +263,7 @@ def layout() -> html.Div:
             dbc.Col(
                 viz_card("Top 15 Drug–Reaction Pairs",
                          "Ranked by co-occurrence count",
-                         graph(_top_pairs_fig(_PAIRS), 420, graph_id="net-top-chart")),
+                         graph(_top_pairs_fig(_PAIRS), 700, graph_id="net-top-chart")),
                 md=6,
             ),
             dbc.Col(

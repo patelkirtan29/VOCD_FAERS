@@ -131,8 +131,8 @@ def _action_by_role_fig(df: pd.DataFrame) -> go.Figure:
         ))
     fig.update_layout(
         height=300, template=CHART_T, barmode="group",
-        xaxis=dict(tickfont=dict(size=11)),
-        yaxis=dict(title="Drug Records", tickformat=","),
+        xaxis=dict(tickfont=dict(size=11), title="Drug Role"),
+        yaxis=dict(title="Records", tickformat=","),
         legend=dict(orientation="h", x=0, y=1.12, font_size=10),
         margin=dict(l=10, r=10, t=35, b=10),
     )
@@ -162,9 +162,8 @@ def _route_bar_fig(df: pd.DataFrame) -> go.Figure:
     ))
     fig.update_layout(
         height=300, template=CHART_T,
-        xaxis=dict(showgrid=False, showticklabels=False,
-                   range=[0, counts["count"].max() * 1.22]),
-        yaxis=dict(tickfont=dict(size=11), automargin=True),
+        xaxis=dict(showgrid=False, showticklabels=False, title="Count"),
+        yaxis=dict(tickfont=dict(size=11), automargin=True, title="Route of Administration"),
         margin=dict(l=10, r=10, t=10, b=10),
     )
     return fig
