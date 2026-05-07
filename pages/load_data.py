@@ -159,12 +159,6 @@ def layout() -> html.Div:
         # KPI row
         dbc.Row(_kpi_row(), class_name="g-3 row-gap"),
 
-        # Source description card
-        _card(
-            "Data Source & Pipeline",
-            _source_alert(),
-        ),
-
         # Files table card
         _card(
             "Datasets Loaded into the Dashboard",
@@ -237,7 +231,6 @@ def register_callbacks(app):
 
     @app.callback(
         Output("ld-preview-slot", "children"),
-        Output("ld-schema-slot",  "children"),
         Output("ld-row-badge",    "children"),
         Input("ld-preview-select", "value"),
     )
@@ -256,7 +249,6 @@ def register_callbacks(app):
         total = meta["rows"] if meta else len(df)
         return (
             data_table(list(df.columns), rows),
-            _schema_table(df),
             f"{total:,} total rows · {df.shape[1]} columns",
         )
 
