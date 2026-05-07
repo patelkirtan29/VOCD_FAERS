@@ -11,6 +11,8 @@ from data_loader import CHART_T, BLUE
 
 NAV = [
     ("/",           "bi-grid-1x2-fill",      "Home"),
+    ("/load-data",  "bi-cloud-download-fill","Load Data"),
+    ("/cleaning",   "bi-eraser-fill",        "Data Cleaning"),
     ("/drug",       "bi-capsule-pill",       "Drug Analysis"),
     ("/reactions",  "bi-activity",           "Reaction Explorer"),
     ("/demo",       "bi-people-fill",        "Patient Demographics"),
