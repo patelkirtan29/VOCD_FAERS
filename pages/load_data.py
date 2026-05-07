@@ -155,10 +155,6 @@ def _card(header: str, *body_children, color: str = INDIGO) -> dbc.Card:
 
 def layout() -> html.Div:
     return html.Div([
-
-        # KPI row
-        dbc.Row(_kpi_row(), class_name="g-3 row-gap"),
-
         # Files table card
         _card(
             "Datasets Loaded into the Dashboard",
