@@ -8,7 +8,8 @@ from dash import Input, Output, dcc, html
 from components import sidebar, topbar, PAGE_TITLES
 from pages import (home, drug, reactions, demographics,
                    geographic, trends, severity, network,
-                   reporter, signals, analytics)
+                   reporter, signals, analytics,
+                   load_data, cleaning)
 
 # ── App ───────────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,8 @@ server = app.server
 
 _PAGES: dict[str, object] = {
     "/":          home,
+    "/load-data": load_data,
+    "/cleaning":  cleaning,
     "/drug":      drug,
     "/reactions": reactions,
     "/demo":      demographics,
