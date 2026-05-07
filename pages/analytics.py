@@ -208,7 +208,8 @@ def _kde_serious_img(method: str = "Raw") -> str:
     return _mpl_to_img(fig)
 
 
-def _seaborn_boxplot_img() -> str:
+def _box_outlier_fig() -> go.Figure:
+    """Interactive box plot for the four primary numeric variables."""
     _CAPS = {
         "age_years": (0, 110), "patientweight": (0, 200),
         "num_drugs": (0, 40),  "num_reactions": (0, 25),
@@ -216,87 +217,203 @@ def _seaborn_boxplot_img() -> str:
     sample = _DF[list(_CAPS)].dropna().sample(min(10000, len(_DF)), random_state=42)
     for col, (lo, hi) in _CAPS.items():
         sample = sample[(sample[col] >= lo) & (sample[col] <= hi)]
-    long = sample.melt(var_name="Variable", value_name="Value")
-    with plt.rc_context(_RC):
-        fig, ax = plt.subplots(figsize=(8, 4.2))
-        pal_b = {
-            "age_years": "#0583F2", "patientweight": "#A36378",
-            "num_drugs": "#295591", "num_reactions": "#CA896D",
-        }
-        sns.boxplot(
-            data=long, x="Variable", y="Value", hue="Variable",
-            palette=pal_b, fliersize=2.5, flierprops={"alpha": 0.35},
-            width=0.5, linewidth=1.0, ax=ax, legend=False,
-        )
-        ax.set_xticks(ax.get_xticks())
-        ax.set_xticklabels(
-            ["Age (yrs)", "Weight (kg)", "Drugs", "Reactions"], fontsize=9
-        )
-        ax.set_xlabel("")
-        ax.set_ylabel("Value", fontsize=10)
-        ax.set_title("Box Plots  Outlier Detection (IQR Method)", fontsize=11,
-                     fontweight="bold", color="#0D0D0D")
-        fig.tight_layout()
-    return _mpl_to_img(fig)
+    pal_b = {
+        "age_years": "#0583F2", "patientweight": "#A36378",
+        "num_drugs": "#295591", "num_reactions": "#CA896D",
+    }
+    labels = {
+        "age_years": "Age (yrs)", "patientweight": "Weight (kg)",
+        "num_drugs": "Drugs", "num_reactions": "Reactions",
+    }
+    fig = go.Figure()
+    for col in _CAPS:
+        s = sample[col]
+        fig.add_trace(go.Box(
+            y=s.tolist(), name=labels[col],
+            marker_color=pal_b[col],
+            line=dict(color=pal_b[col], width=1.0),
+            fillcolor=pal_b[col],
+            opacity=0.65, width=0.5,
+            boxmean="sd",
+            marker=dict(size=2.5, opacity=0.4, outliercolor=pal_b[col]),
+            hovertemplate=f"<b>{labels[col]}</b><br>Value: %{{y:.2f}}<extra></extra>",
+        ))
+    fig.update_layout(
+        height=380, template=CHART_T,
+        yaxis=dict(title="Value"),
+        xaxis=dict(title=""),
+        showlegend=False,
+        margin=dict(l=10, r=10, t=20, b=20),
+    )
+    return fig
 
 
-def _weight_dist_img() -> str:
+def _weight_dist_fig() -> go.Figure:
+    """Interactive raw + log-transformed weight distribution with histogram, KDE, and rug."""
     wt = _DF["patientweight"].dropna()
     wt = wt[(wt > 0) & (wt <= 300)]
-    sample = wt.sample(min(20000, len(wt)), random_state=42)
-    with plt.rc_context(_RC):
-        fig, axes = plt.subplots(1, 2, figsize=(9, 3.6))
-        # Left: histogram + rug + KDE
-        axes[0].hist(sample, bins=60, color="#0583F2", alpha=0.55, density=True,
-                     edgecolor="none", label="Histogram")
-        sns.kdeplot(sample, ax=axes[0], color="#295591", linewidth=2.2, label="KDE")
-        axes[0].plot(sample, np.full(len(sample), -0.0005), "|",
-                     color="#668CD9", alpha=0.18, markersize=4, label="Rug")
-        axes[0].set_xlabel("Patient Weight (kg)", fontsize=10)
-        axes[0].set_ylabel("Density", fontsize=10)
-        axes[0].set_title("Weight Distribution + Rug", fontsize=10,
-                           fontweight="bold", color="#0D0D0D")
-        axes[0].legend(fontsize=8)
-        # Right: log-transformed
-        log_wt = np.log1p(sample)
-        axes[1].hist(log_wt, bins=60, color="#A36378", alpha=0.55, density=True,
-                     edgecolor="none")
-        sns.kdeplot(log_wt, ax=axes[1], color="#c97c0a", linewidth=2.2)
-        axes[1].set_xlabel("log(Weight + 1)", fontsize=10)
-        axes[1].set_ylabel("Density", fontsize=10)
-        axes[1].set_title("Log-Transformed Weight", fontsize=10,
-                           fontweight="bold", color="#0D0D0D")
-        fig.suptitle("Patient Weight  Raw vs Log Transform", fontsize=11,
-                     fontweight="bold", color="#0D0D0D", y=1.01)
-        fig.tight_layout()
-    return _mpl_to_img(fig)
+    sample = wt.sample(min(20000, len(wt)), random_state=42).values.astype(float)
+    log_wt = np.log1p(sample)
+    rng = np.random.default_rng(42)
+    rug_idx = rng.choice(len(sample), size=min(2000, len(sample)), replace=False)
+    rug_raw = sample[rug_idx]
+    rug_log = log_wt[rug_idx]
+
+    fig = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=("Raw Weight Distribution", "Log-Transformed Weight"),
+        horizontal_spacing=0.10,
+    )
+    # Left: raw histogram + KDE + rug
+    fig.add_trace(
+        go.Histogram(
+            x=sample.tolist(), name="Histogram",
+            marker_color="#0583F2", opacity=0.55,
+            histnorm="probability density", nbinsx=60,
+            hovertemplate="Weight: %{x:.1f} kg<br>Density: %{y:.4f}<extra></extra>",
+            showlegend=False,
+        ),
+        row=1, col=1,
+    )
+    x_kde, y_kde = _kde_curve(sample, n_points=240)
+    if len(x_kde):
+        fig.add_trace(
+            go.Scatter(
+                x=x_kde.tolist(), y=y_kde.tolist(),
+                mode="lines", line=dict(color="#295591", width=2.2),
+                name="KDE", showlegend=False,
+                hovertemplate="Weight: %{x:.1f} kg<br>KDE: %{y:.4f}<extra></extra>",
+            ),
+            row=1, col=1,
+        )
+    fig.add_trace(
+        go.Scatter(
+            x=rug_raw.tolist(),
+            y=np.zeros(len(rug_raw)).tolist(),
+            mode="markers",
+            marker=dict(symbol="line-ns-open", size=8,
+                        color="#668CD9", opacity=0.35,
+                        line=dict(width=1)),
+            name="Rug", showlegend=False,
+            hovertemplate="Weight: %{x:.1f} kg<extra></extra>",
+        ),
+        row=1, col=1,
+    )
+
+    # Right: log-transformed
+    fig.add_trace(
+        go.Histogram(
+            x=log_wt.tolist(), name="Log Histogram",
+            marker_color="#A36378", opacity=0.55,
+            histnorm="probability density", nbinsx=60,
+            hovertemplate="log(W+1): %{x:.2f}<br>Density: %{y:.4f}<extra></extra>",
+            showlegend=False,
+        ),
+        row=1, col=2,
+    )
+    x_kde2, y_kde2 = _kde_curve(log_wt, n_points=240)
+    if len(x_kde2):
+        fig.add_trace(
+            go.Scatter(
+                x=x_kde2.tolist(), y=y_kde2.tolist(),
+                mode="lines", line=dict(color="#c97c0a", width=2.2),
+                name="Log KDE", showlegend=False,
+                hovertemplate="log(W+1): %{x:.2f}<br>KDE: %{y:.4f}<extra></extra>",
+            ),
+            row=1, col=2,
+        )
+    fig.add_trace(
+        go.Scatter(
+            x=rug_log.tolist(),
+            y=np.zeros(len(rug_log)).tolist(),
+            mode="markers",
+            marker=dict(symbol="line-ns-open", size=8,
+                        color="#A36378", opacity=0.35,
+                        line=dict(width=1)),
+            name="Rug", showlegend=False,
+            hovertemplate="log(W+1): %{x:.2f}<extra></extra>",
+        ),
+        row=1, col=2,
+    )
+
+    fig.update_xaxes(title_text="Patient Weight (kg)", row=1, col=1, title_font_size=10)
+    fig.update_xaxes(title_text="log(Weight + 1)",     row=1, col=2, title_font_size=10)
+    fig.update_yaxes(title_text="Density", row=1, col=1, title_font_size=10)
+    fig.update_yaxes(title_text="Density", row=1, col=2, title_font_size=10)
+    fig.update_layout(
+        height=380, template=CHART_T,
+        showlegend=False, bargap=0.05,
+        margin=dict(l=10, r=10, t=40, b=20),
+    )
+    return fig
 
 
-def _swarm_img() -> str:
-    """Swarm plot  individual points distributed without overlap (small sample required)."""
+def _beeswarm_x(y_values: np.ndarray, x_center: float, half_width: float = 0.34) -> np.ndarray:
+    """Compute non-overlapping x positions for a beeswarm using y-binning."""
+    y_arr = np.asarray(y_values, dtype=float)
+    n = len(y_arr)
+    if n == 0:
+        return np.array([])
+    y_min, y_max = float(y_arr.min()), float(y_arr.max())
+    if y_max == y_min:
+        return np.full(n, x_center)
+    n_bins = max(int(np.sqrt(n) * 1.6), 8)
+    bin_edges = np.linspace(y_min, y_max, n_bins + 1)
+    bin_idx = np.clip(np.digitize(y_arr, bin_edges) - 1, 0, n_bins - 1)
+    x_pos = np.full(n, float(x_center))
+    for b in range(n_bins):
+        mask = bin_idx == b
+        cnt = int(mask.sum())
+        if cnt <= 1:
+            continue
+        spread = min(half_width, 0.06 * cnt)
+        offsets = np.linspace(-spread, spread, cnt)
+        # interleave so dense bins cluster near the centre line
+        interleaved = np.empty_like(offsets)
+        interleaved[0::2] = offsets[: (cnt + 1) // 2]
+        interleaved[1::2] = offsets[(cnt + 1) // 2 :][::-1]
+        x_pos[mask] = x_center + interleaved
+    return x_pos
+
+
+def _swarm_fig() -> go.Figure:
+    """Beeswarm  seriousness score by sex (positions computed manually for non-overlap)."""
     sub = _DF[["seriousness_score", "sex_label"]].dropna()
     sub = sub[sub["sex_label"].isin(["Female", "Male"])]
     sub = sub.sample(min(400, len(sub)), random_state=42)
     pal = {"Female": "#A36378", "Male": "#0583F2"}
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", UserWarning)
-        with plt.rc_context(_RC):
-            fig, ax = plt.subplots(figsize=(6, 3.8))
-            sns.swarmplot(
-                data=sub, x="sex_label", y="seriousness_score",
-                hue="sex_label", palette=pal, size=3.5, alpha=0.65,
-                ax=ax, legend=False,
-            )
-            ax.set_xlabel("")
-            ax.set_ylabel("Seriousness Score", fontsize=10)
-            ax.set_title("Swarm Plot  Seriousness Score by Sex", fontsize=11,
-                         fontweight="bold", color="#0D0D0D")
-            fig.tight_layout()
-        return _mpl_to_img(fig)
+    sex_order = ["Female", "Male"]
+
+    fig = go.Figure()
+    for i, sex in enumerate(sex_order):
+        s = sub[sub["sex_label"] == sex]
+        if s.empty:
+            continue
+        y = s["seriousness_score"].values.astype(float)
+        x = _beeswarm_x(y, x_center=float(i), half_width=0.34)
+        fig.add_trace(go.Scatter(
+            x=x.tolist(), y=y.tolist(),
+            mode="markers", name=sex,
+            marker=dict(size=7, color=pal[sex], opacity=0.75,
+                        line=dict(color="#ffffff", width=0.6)),
+            hovertemplate=f"<b>{sex}</b><br>Score: %{{y}}<extra></extra>",
+        ))
+    fig.update_layout(
+        height=340, template=CHART_T,
+        xaxis=dict(
+            tickmode="array", tickvals=list(range(len(sex_order))),
+            ticktext=sex_order, range=[-0.6, len(sex_order) - 0.4],
+            title="",
+        ),
+        yaxis=dict(title="Seriousness Score"),
+        legend=dict(orientation="h", x=0, y=1.10, font_size=10),
+        margin=dict(l=10, r=10, t=30, b=20),
+    )
+    return fig
 
 
-def _boxen_img() -> str:
-    """Boxen (letter-value) plot  reveals tail shape better than a standard box plot."""
+def _boxen_fig() -> go.Figure:
+    """Letter-value (boxen) plot built from nested percentile rectangles + hover overlay."""
     sub = _DF[["age_years", "agegrp_label"]].dropna()
     sub = sub[(sub["age_years"] >= 0) & (sub["age_years"] <= 110)]
     sub = sub.sample(min(20000, len(sub)), random_state=42)
@@ -307,24 +424,85 @@ def _boxen_img() -> str:
         "Adolescent": "#6A8FD9", "Adult": "#295591",
         "Elderly": "#A36378", "Unknown": "#BFC7D9",
     }
-    with plt.rc_context(_RC):
-        fig, ax = plt.subplots(figsize=(8, 4.0))
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", UserWarning)
-            sns.boxenplot(
-                data=sub, x="agegrp_label", y="age_years",
-                hue="agegrp_label", palette=pal_b, order=order,
-                ax=ax, linewidth=0.8, legend=False,
+    fig = go.Figure()
+    box_w = 0.7
+    n_levels = 5
+
+    for x_pos, grp in enumerate(order):
+        s = sub[sub["agegrp_label"] == grp]["age_years"].values.astype(float)
+        if len(s) < 8:
+            continue
+        color = pal_b.get(grp, "#0583F2")
+        # Letter-value pairs at p = 1/2^(k+1)
+        levels = []
+        for k in range(1, n_levels + 1):
+            p = 0.5 ** (k + 1)
+            lo, hi = float(np.quantile(s, p)), float(np.quantile(s, 1 - p))
+            levels.append((lo, hi, p))
+        # Outermost (widest, palest) first
+        for i, (lo, hi, _) in enumerate(reversed(levels)):
+            level_idx = n_levels - i  # outermost = n_levels
+            half_w = (box_w / 2) * (0.30 + 0.70 * level_idx / n_levels)
+            opacity = 0.32 + 0.12 * i  # darker as we move inward
+            fig.add_shape(
+                type="rect",
+                x0=x_pos - half_w, x1=x_pos + half_w,
+                y0=lo, y1=hi,
+                fillcolor=color, opacity=opacity,
+                line=dict(color=color, width=0.6),
+                layer="below",
             )
-        ax.set_xlabel("Age Group", fontsize=10)
-        ax.set_ylabel("Age (years)", fontsize=10)
-        ax.set_title("Boxen (Letter-Value) Plot  Age Distribution by Age Group",
-                     fontsize=11, fontweight="bold", color="#0D0D0D")
-        fig.tight_layout()
-    return _mpl_to_img(fig)
+        med = float(np.median(s))
+        q1, q3 = float(np.quantile(s, 0.25)), float(np.quantile(s, 0.75))
+        # Median line (drawn as shape so it sits on top of fills but under hover)
+        fig.add_shape(
+            type="line",
+            x0=x_pos - box_w / 2, x1=x_pos + box_w / 2,
+            y0=med, y1=med,
+            line=dict(color="#0D0D0D", width=1.8),
+            layer="below",
+        )
+        # Invisible scatter trace for hover info on each group
+        fig.add_trace(go.Scatter(
+            x=[x_pos], y=[med], mode="markers",
+            marker=dict(size=18, color=color, opacity=0.001),
+            name=grp, showlegend=False,
+            hovertemplate=(
+                f"<b>{grp}</b><br>"
+                f"n = {len(s):,}<br>"
+                f"Median: {med:.1f}<br>"
+                f"Q1–Q3: {q1:.1f}–{q3:.1f}<br>"
+                f"Min – Max: {s.min():.1f} – {s.max():.1f}"
+                "<extra></extra>"
+            ),
+        ))
+
+    fig.update_layout(
+        height=420, template=CHART_T,
+        xaxis=dict(
+            title="Age Group",
+            tickmode="array", tickvals=list(range(len(order))), ticktext=order,
+            range=[-0.6, len(order) - 0.4],
+        ),
+        yaxis=dict(title="Age (years)"),
+        showlegend=False,
+        margin=dict(l=10, r=10, t=30, b=20),
+    )
+    return fig
 
 
 # ── Plotly interactive charts (callback-driven) ───────────────────────────────
+
+def _kde_curve(values: np.ndarray, n_points: int = 200) -> tuple[np.ndarray, np.ndarray]:
+    """Return (x_grid, density) for a smooth KDE curve, or empty arrays if degenerate."""
+    arr = np.asarray(values, dtype=float)
+    arr = arr[np.isfinite(arr)]
+    if len(arr) < 2 or float(arr.std()) == 0.0:
+        return np.array([]), np.array([])
+    kde = sp_stats.gaussian_kde(arr)
+    x_grid = np.linspace(float(arr.min()), float(arr.max()), n_points)
+    return x_grid, kde(x_grid)
+
 
 def _hist_rug_fig(field: str = "age_years", group: str = "sex_label") -> go.Figure:
     df = _DF[[field, group]].dropna()
@@ -355,7 +533,68 @@ def _hist_rug_fig(field: str = "age_years", group: str = "sex_label") -> go.Figu
     return fig
 
 
-def _qqplot_fig(field: str = "age_years") -> go.Figure:
+def _normality_tests(s: np.ndarray) -> dict:
+    """Run Shapiro–Wilk, Kolmogorov–Smirnov, and D'Agostino–Pearson on the sample."""
+    out: dict = {}
+    # Shapiro–Wilk (scipy caps reliability around n=5000; sample is already capped)
+    try:
+        sw_stat, sw_p = sp_stats.shapiro(s)
+        out["sw"] = (float(sw_stat), float(sw_p))
+    except Exception:
+        out["sw"] = (float("nan"), float("nan"))
+    # Kolmogorov–Smirnov vs Normal(mean, std) of the sample
+    try:
+        mu, sd = float(np.mean(s)), float(np.std(s, ddof=1))
+        if sd > 0:
+            ks_stat, ks_p = sp_stats.kstest(s, "norm", args=(mu, sd))
+            out["ks"] = (float(ks_stat), float(ks_p))
+        else:
+            out["ks"] = (float("nan"), float("nan"))
+    except Exception:
+        out["ks"] = (float("nan"), float("nan"))
+    # D'Agostino–Pearson (skewness + kurtosis combined; needs n ≥ 8)
+    try:
+        if len(s) >= 8:
+            dp_stat, dp_p = sp_stats.normaltest(s)
+            out["dp"] = (float(dp_stat), float(dp_p))
+        else:
+            out["dp"] = (float("nan"), float("nan"))
+    except Exception:
+        out["dp"] = (float("nan"), float("nan"))
+    return out
+
+
+def _fmt_p(p: float) -> str:
+    if not np.isfinite(p):
+        return "n/a"
+    if p < 1e-300:
+        return "p ≈ 0"
+    if p < 1e-3:
+        return f"p = {p:.2e}"
+    return f"p = {p:.3f}"
+
+
+def _verdict(p: float, alpha: float = 0.05) -> str:
+    if not np.isfinite(p):
+        return "n/a"
+    return "~Normal" if p >= alpha else "Non-Normal"
+
+
+_NORMALITY_OPTS = [
+    {"label": "Shapiro–Wilk",       "value": "Shapiro–Wilk"},
+    {"label": "Kolmogorov–Smirnov", "value": "Kolmogorov–Smirnov"},
+    {"label": "D'Agostino–Pearson", "value": "D'Agostino–Pearson"},
+    {"label": "All Tests",          "value": "All Tests"},
+]
+
+_TEST_META = {
+    "Shapiro–Wilk":       ("sw", "W"),
+    "Kolmogorov–Smirnov": ("ks", "D"),
+    "D'Agostino–Pearson": ("dp", "K²"),
+}
+
+
+def _qqplot_fig(field: str = "age_years", test: str = "Shapiro–Wilk") -> go.Figure:
     raw = _DF[field].dropna().values
     raw = raw[np.isfinite(raw)]
     cap = np.percentile(raw, 99)
@@ -363,8 +602,7 @@ def _qqplot_fig(field: str = "age_years") -> go.Figure:
     s   = np.random.default_rng(42).choice(raw, min(5000, len(raw)), replace=False)
 
     (osm, osr), (slope, intercept, r) = sp_stats.probplot(s, dist="norm", fit=True)
-
-    _, sw_p = sp_stats.shapiro(s[:min(5000, len(s))])
+    tests = _normality_tests(s)
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -382,20 +620,41 @@ def _qqplot_fig(field: str = "age_years") -> go.Figure:
         line=dict(color=RED, dash="dash", width=1.8),
         name="Fit line",
     ))
-    p_label = f"p = {sw_p:.2e}" if sw_p > 1e-300 else "p ≈ 0"
-    normal  = "~Normal" if sw_p >= 0.05 else "Non-Normal"
+
+    # Color-code verdict (green = normal, crimson = non-normal, slate = n/a)
+    def _vc(p: float) -> str:
+        if not np.isfinite(p):
+            return "#64748b"
+        return "#0a8754" if p >= 0.05 else "#c0392b"
+
+    # def _line(test_name: str) -> str:
+    #     key, stat_lbl = _TEST_META[test_name]
+    #     st, p = tests[key]
+    #     verdict_html = f"<b style='color:{_vc(p)}'>{_verdict(p)}</b>"
+    #     if not np.isfinite(st):
+    #         return f"{test_name}: {verdict_html}"
+    #     return (f"{test_name}: {verdict_html}"
+    #             f"  ({stat_lbl} = {st:.3f}, {_fmt_p(p)})")
+
+    # if test == "All Tests":
+    #     title = "<b>Normality Tests  (α = 0.05)</b>"
+    #     body  = "<br>".join(_line(t) for t in
+    #                         ("Shapiro–Wilk", "Kolmogorov–Smirnov", "D'Agostino–Pearson"))
+    # elif test in _TEST_META:
+    #     title = "<b>Normality Test  (α = 0.05)</b>"
+    #     body  = _line(test)
+    # else:
+    #     title = "<b>Normality Test  (α = 0.05)</b>"
+    #     body  = _line("Shapiro–Wilk")
+
+    # annotation_text = f"{title}<br>{body}"
+
     fig.update_layout(
-        height=310, template=CHART_T,
+        height=360, template=CHART_T,
         xaxis=dict(title="Theoretical Quantiles (Normal)"),
         yaxis=dict(title="Sample Quantiles"),
         legend=dict(orientation="h", x=0, y=1.12, font_size=10),
         margin=dict(l=10, r=10, t=10, b=10),
-        annotations=[dict(
-            text=f"Shapiro-Wilk: {normal} ({p_label})",
-            x=0.98, y=0.04, xref="paper", yref="paper",
-            showarrow=False, font=dict(size=10, color="#64748b"),
-            xanchor="right",
-        )],
     )
     return fig
 
@@ -640,64 +899,104 @@ def _regplot_fig(field: str = "age_years") -> go.Figure:
     return fig
 
 
-# ── Seaborn jointplot replacements (hexbin + KDE contour) ────────────────────
+# ── Plotly equivalents of seaborn jointplot / scatter grid / hist grid ───────
 
-def _hexbin_img() -> str:
-    """Seaborn jointplot (hex)  age vs weight with marginal histograms."""
+def _hexbin_fig() -> go.Figure:
+    """Density heatmap of age vs weight with marginal histograms (Plotly hexbin substitute)."""
     df = _DF[["age_years", "patientweight"]].dropna()
     df = df[(df["age_years"] >= 5) & (df["age_years"] <= 95)]
     df = df[(df["patientweight"] >= 25) & (df["patientweight"] <= 160)]
     df = df.sample(min(20000, len(df)), random_state=42)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        with plt.rc_context({**_RC, "axes.facecolor": "#f5f6fc",
-                             "figure.facecolor": "white"}):
-            g = sns.jointplot(
-                data=df, x="age_years", y="patientweight",
-                kind="hex",
-                color="#0583F2",
-                height=5.8,
-                ratio=6,
-                marginal_kws=dict(bins=45, fill=True, color="#668CD9", alpha=0.7),
-                joint_kws=dict(gridsize=35, cmap="Blues"),
-            )
-            g.set_axis_labels("Age (years)", "Patient Weight (kg)", fontsize=10)
-            g.figure.suptitle("Hexbin  Age vs Patient Weight",
-                              fontsize=11, fontweight="bold", color="#0D0D0D", y=1.01)
-            g.figure.tight_layout()
-    return _mpl_to_img(g.figure)
+
+    fig = make_subplots(
+        rows=2, cols=2,
+        column_widths=[0.82, 0.18],
+        row_heights=[0.18, 0.82],
+        horizontal_spacing=0.02, vertical_spacing=0.02,
+        shared_xaxes=True, shared_yaxes=True,
+    )
+    # Top marginal — age histogram
+    fig.add_trace(
+        go.Histogram(
+            x=df["age_years"].tolist(),
+            marker=dict(color="#668CD9"), opacity=0.75,
+            nbinsx=45, showlegend=False,
+            hovertemplate="Age: %{x}<br>Count: %{y}<extra></extra>",
+        ),
+        row=1, col=1,
+    )
+    # Main 2D density heatmap
+    fig.add_trace(
+        go.Histogram2d(
+            x=df["age_years"].tolist(),
+            y=df["patientweight"].tolist(),
+            colorscale="Blues",
+            nbinsx=35, nbinsy=35,
+            colorbar=dict(title="Count", thickness=10, len=0.62, x=1.04, y=0.40),
+            hovertemplate="Age: %{x}<br>Weight: %{y}<br>Count: %{z}<extra></extra>",
+        ),
+        row=2, col=1,
+    )
+    # Right marginal — weight histogram
+    fig.add_trace(
+        go.Histogram(
+            y=df["patientweight"].tolist(),
+            marker=dict(color="#668CD9"), opacity=0.75,
+            nbinsy=45, showlegend=False,
+            hovertemplate="Weight: %{y}<br>Count: %{x}<extra></extra>",
+        ),
+        row=2, col=2,
+    )
+    # Hide ticks on the marginal axes
+    fig.update_xaxes(showticklabels=False, row=1, col=1)
+    fig.update_yaxes(showticklabels=False, row=2, col=2)
+    fig.update_xaxes(title_text="Age (years)",       row=2, col=1, title_font_size=10)
+    fig.update_yaxes(title_text="Patient Weight (kg)", row=2, col=1, title_font_size=10)
+
+    fig.update_layout(
+        height=420, template=CHART_T,
+        showlegend=False, bargap=0.04,
+        margin=dict(l=10, r=70, t=20, b=20),
+    )
+    return fig
 
 
-def _contour_kde_img() -> str:
-    """Seaborn jointplot (kde)  smoothed density contours with marginal KDEs."""
+def _contour_kde_fig() -> go.Figure:
+    """2D KDE contour: serious vs non-serious overlaid on age × weight."""
     df = _DF[["age_years", "patientweight", "serious_label"]].dropna()
     df = df[(df["age_years"] >= 5) & (df["age_years"] <= 95)]
     df = df[(df["patientweight"] >= 25) & (df["patientweight"] <= 150)]
     df = df.sample(min(15000, len(df)), random_state=42)
     pal = {"Serious": "#CA896D", "Non-Serious": "#0583F2"}
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        with plt.rc_context({**_RC, "axes.facecolor": "#f5f6fc",
-                             "figure.facecolor": "white"}):
-            fig, ax = plt.subplots(figsize=(6, 5))
-            for label, color in pal.items():
-                sub = df[df["serious_label"] == label]
-                sns.kdeplot(
-                    data=sub, x="age_years", y="patientweight",
-                    ax=ax, color=color, fill=True, alpha=0.25,
-                    levels=6, linewidths=1.5, label=label,
-                )
-            ax.set_xlabel("Age (years)", fontsize=10)
-            ax.set_ylabel("Patient Weight (kg)", fontsize=10)
-            ax.set_title("2D KDE Contour  Age vs Weight by Seriousness",
-                         fontsize=11, fontweight="bold", color="#0D0D0D")
-            ax.legend(fontsize=9)
-            fig.tight_layout()
-    return _mpl_to_img(fig)
+
+    fig = go.Figure()
+    for label, color in pal.items():
+        sub = df[df["serious_label"] == label]
+        if sub.empty:
+            continue
+        fig.add_trace(go.Histogram2dContour(
+            x=sub["age_years"].tolist(),
+            y=sub["patientweight"].tolist(),
+            name=label, legendgroup=label,
+            colorscale=[[0.0, "rgba(255,255,255,0)"], [1.0, color]],
+            showscale=False,
+            ncontours=7,
+            line=dict(width=1.2),
+            opacity=0.55,
+            hovertemplate=f"<b>{label}</b><br>Age: %{{x:.0f}}<br>Weight: %{{y:.0f}}<br>Density: %{{z:.4f}}<extra></extra>",
+        ))
+    fig.update_layout(
+        height=420, template=CHART_T,
+        xaxis=dict(title="Age (years)"),
+        yaxis=dict(title="Patient Weight (kg)"),
+        legend=dict(orientation="h", x=0, y=1.10, font_size=11),
+        margin=dict(l=10, r=10, t=40, b=20),
+    )
+    return fig
 
 
-def _scatter_subplots_img() -> str:
-    """2×2 scatter subplot grid  age vs weight from four different grouping perspectives."""
+def _scatter_subplots_fig() -> go.Figure:
+    """2×2 multivariate scatter grid (interactive) — sex / seriousness / drugs×reactions / OLS."""
     cols = ["age_years", "patientweight", "sex_label", "serious_label",
             "num_drugs", "num_reactions", "seriousness_score"]
     df = _DF[cols].dropna()
@@ -705,63 +1004,116 @@ def _scatter_subplots_img() -> str:
     df = df[(df["patientweight"] >= 20) & (df["patientweight"] <= 160)]
     df = df.sample(min(6000, len(df)), random_state=42)
 
-    with plt.rc_context(_RC):
-        fig, axes = plt.subplots(2, 2, figsize=(11, 8))
+    fig = make_subplots(
+        rows=2, cols=2,
+        subplot_titles=(
+            "Age vs Weight  · by Sex",
+            "Age vs Weight  · by Seriousness",
+            "Drugs vs Reactions  · colored by Score",
+            "Age vs Seriousness Score + OLS",
+        ),
+        horizontal_spacing=0.10, vertical_spacing=0.16,
+    )
 
-        # Top-left: Age vs Weight by Sex
-        pal_sex = {"Female": "#A36378", "Male": "#0583F2", "Unknown": "#BFC7D9"}
-        for sex, color in pal_sex.items():
-            sub = df[df["sex_label"] == sex]
-            axes[0, 0].scatter(sub["age_years"], sub["patientweight"],
-                               c=color, alpha=0.22, s=7, label=sex, rasterized=True)
-        axes[0, 0].set_xlabel("Age (years)", fontsize=9)
-        axes[0, 0].set_ylabel("Weight (kg)", fontsize=9)
-        axes[0, 0].set_title("Age vs Weight  by Sex", fontsize=10, fontweight="bold", color="#0D0D0D")
-        axes[0, 0].legend(fontsize=8, markerscale=2.5, framealpha=0.7)
-
-        # Top-right: Age vs Weight by Seriousness
-        pal_ser = {"Serious": "#CA896D", "Non-Serious": "#0583F2"}
-        for label, color in pal_ser.items():
-            sub = df[df["serious_label"] == label]
-            axes[0, 1].scatter(sub["age_years"], sub["patientweight"],
-                               c=color, alpha=0.22, s=7, label=label, rasterized=True)
-        axes[0, 1].set_xlabel("Age (years)", fontsize=9)
-        axes[0, 1].set_ylabel("Weight (kg)", fontsize=9)
-        axes[0, 1].set_title("Age vs Weight  by Seriousness", fontsize=10, fontweight="bold", color="#0D0D0D")
-        axes[0, 1].legend(fontsize=8, markerscale=2.5, framealpha=0.7)
-
-        # Bottom-left: Num Drugs vs Num Reactions, color = seriousness score
-        sc = axes[1, 0].scatter(
-            df["num_drugs"], df["num_reactions"],
-            c=df["seriousness_score"], cmap="Blues_r",
-            alpha=0.3, s=7, vmin=0, vmax=6, rasterized=True,
+    # Top-left: by sex
+    pal_sex = {"Female": "#A36378", "Male": "#0583F2", "Unknown": "#BFC7D9"}
+    for sex, color in pal_sex.items():
+        sub = df[df["sex_label"] == sex]
+        if sub.empty:
+            continue
+        fig.add_trace(
+            go.Scattergl(
+                x=sub["age_years"].tolist(), y=sub["patientweight"].tolist(),
+                mode="markers", name=sex,
+                legendgroup=f"sex-{sex}",
+                marker=dict(size=4, color=color, opacity=0.42),
+                hovertemplate=f"<b>{sex}</b><br>Age: %{{x:.0f}}<br>Weight: %{{y:.0f}} kg<extra></extra>",
+            ),
+            row=1, col=1,
         )
-        plt.colorbar(sc, ax=axes[1, 0], label="Seriousness Score", shrink=0.85)
-        axes[1, 0].set_xlabel("Number of Drugs", fontsize=9)
-        axes[1, 0].set_ylabel("Number of Reactions", fontsize=9)
-        axes[1, 0].set_title("Drugs vs Reactions  colored by Seriousness", fontsize=10, fontweight="bold", color="#0D0D0D")
 
-        # Bottom-right: Age vs Seriousness Score + OLS line
-        x_vals = df["age_years"].values
-        y_vals = df["seriousness_score"].values
-        axes[1, 1].scatter(x_vals, y_vals, c="#668CD9", alpha=0.18, s=7, rasterized=True)
-        m, b = np.polyfit(x_vals, y_vals, 1)
-        x_line = np.linspace(x_vals.min(), x_vals.max(), 200)
-        axes[1, 1].plot(x_line, m * x_line + b, color="#c0392b", linewidth=2.2,
-                        label=f"OLS  slope={m:.4f}")
-        axes[1, 1].set_xlabel("Age (years)", fontsize=9)
-        axes[1, 1].set_ylabel("Seriousness Score", fontsize=9)
-        axes[1, 1].set_title("Age vs Seriousness Score + Regression", fontsize=10, fontweight="bold", color="#0D0D0D")
-        axes[1, 1].legend(fontsize=8, framealpha=0.7)
+    # Top-right: by seriousness
+    pal_ser = {"Serious": "#CA896D", "Non-Serious": "#0583F2"}
+    for label, color in pal_ser.items():
+        sub = df[df["serious_label"] == label]
+        if sub.empty:
+            continue
+        fig.add_trace(
+            go.Scattergl(
+                x=sub["age_years"].tolist(), y=sub["patientweight"].tolist(),
+                mode="markers", name=label,
+                legendgroup=f"ser-{label}",
+                marker=dict(size=4, color=color, opacity=0.42),
+                hovertemplate=f"<b>{label}</b><br>Age: %{{x:.0f}}<br>Weight: %{{y:.0f}} kg<extra></extra>",
+            ),
+            row=1, col=2,
+        )
 
-        fig.suptitle("Multivariate Scatter Subplots", fontsize=13,
-                     fontweight="bold", color="#0D0D0D", y=1.01)
-        fig.tight_layout()
-    return _mpl_to_img(fig)
+    # Bottom-left: drugs vs reactions colored by score
+    fig.add_trace(
+        go.Scattergl(
+            x=df["num_drugs"].tolist(), y=df["num_reactions"].tolist(),
+            mode="markers", name="Drugs × Reactions",
+            showlegend=False,
+            marker=dict(
+                size=5,
+                color=df["seriousness_score"].tolist(),
+                colorscale="Blues", reversescale=True,
+                cmin=0, cmax=6, opacity=0.55,
+                colorbar=dict(
+                    title="Score", thickness=10, len=0.36,
+                    x=0.46, y=0.22, tickfont=dict(size=9),
+                ),
+            ),
+            hovertemplate="Drugs: %{x}<br>Reactions: %{y}<br>Score: %{marker.color}<extra></extra>",
+        ),
+        row=2, col=1,
+    )
+
+    # Bottom-right: age vs score + OLS line
+    x_vals = df["age_years"].values.astype(float)
+    y_vals = df["seriousness_score"].values.astype(float)
+    fig.add_trace(
+        go.Scattergl(
+            x=x_vals.tolist(), y=y_vals.tolist(),
+            mode="markers", name="Records",
+            showlegend=False,
+            marker=dict(size=4, color="#668CD9", opacity=0.30),
+            hovertemplate="Age: %{x:.0f}<br>Score: %{y}<extra></extra>",
+        ),
+        row=2, col=2,
+    )
+    m, b_int = np.polyfit(x_vals, y_vals, 1)
+    x_line = np.linspace(float(x_vals.min()), float(x_vals.max()), 100)
+    fig.add_trace(
+        go.Scatter(
+            x=x_line.tolist(), y=(m * x_line + b_int).tolist(),
+            mode="lines", line=dict(color="#c0392b", width=2.2),
+            name=f"OLS slope={m:.4f}",
+            hovertemplate="OLS fit<extra></extra>",
+        ),
+        row=2, col=2,
+    )
+
+    fig.update_xaxes(title_text="Age (years)",         row=1, col=1, title_font_size=10)
+    fig.update_yaxes(title_text="Weight (kg)",         row=1, col=1, title_font_size=10)
+    fig.update_xaxes(title_text="Age (years)",         row=1, col=2, title_font_size=10)
+    fig.update_yaxes(title_text="Weight (kg)",         row=1, col=2, title_font_size=10)
+    fig.update_xaxes(title_text="Number of Drugs",     row=2, col=1, title_font_size=10)
+    fig.update_yaxes(title_text="Number of Reactions", row=2, col=1, title_font_size=10)
+    fig.update_xaxes(title_text="Age (years)",         row=2, col=2, title_font_size=10)
+    fig.update_yaxes(title_text="Seriousness Score",   row=2, col=2, title_font_size=10)
+
+    fig.update_layout(
+        height=720, template=CHART_T,
+        legend=dict(orientation="h", x=0, y=1.07, font_size=10),
+        margin=dict(l=10, r=10, t=60, b=20),
+    )
+    return fig
 
 
-def _hist_grid_img() -> str:
-    """Seaborn histogram + KDE grid for all numeric variables."""
+def _hist_grid_fig() -> go.Figure:
+    """2×3 grid of interactive histograms with KDE overlay and mean line per variable."""
     field_cfg = [
         ("age_years",            "Age (years)",          "#0583F2"),
         ("patientweight",        "Patient Weight (kg)",  "#A36378"),
@@ -773,28 +1125,63 @@ def _hist_grid_img() -> str:
     df = _DF[[f for f, _, _ in field_cfg]].dropna()
     df = df.sample(min(20000, len(df)), random_state=42)
 
-    with plt.rc_context(_RC):
-        fig, axes = plt.subplots(2, 3, figsize=(13, 7))
-        for ax, (col, label, color) in zip(axes.flatten(), field_cfg):
-            data = df[col]
-            cap  = float(data.quantile(0.99))
-            data = data[data <= cap]
-            sns.histplot(data, ax=ax, color=color, alpha=0.6, bins=40, kde=True)
-            # thicken the KDE line drawn on top
-            for line in ax.lines:
-                line.set_linewidth(1.4)
-                line.set_color("#0D0D0D")
-            ax.set_xlabel(label, fontsize=9)
-            ax.set_ylabel("Count", fontsize=9)
-            ax.set_title(f"{label}", fontsize=10, fontweight="bold", color="#0D0D0D")
-            mean_val = float(data.mean())
-            ax.axvline(mean_val, color="#c0392b", linestyle="--",
-                       linewidth=1.4, label=f"mean={mean_val:.1f}")
-            ax.legend(fontsize=7.5, framealpha=0.7)
-        fig.suptitle("Variable Distributions  Histogram + KDE",
-                     fontsize=13, fontweight="bold", color="#0D0D0D", y=1.01)
-        fig.tight_layout()
-    return _mpl_to_img(fig)
+    fig = make_subplots(
+        rows=2, cols=3,
+        subplot_titles=[c[1] for c in field_cfg],
+        horizontal_spacing=0.08, vertical_spacing=0.18,
+    )
+    for i, (col, label, color) in enumerate(field_cfg):
+        r, c = i // 3 + 1, i % 3 + 1
+        data = df[col].values.astype(float)
+        cap = float(np.quantile(data, 0.99))
+        data = data[data <= cap]
+        if len(data) == 0:
+            continue
+        mean_val = float(np.mean(data))
+
+        fig.add_trace(
+            go.Histogram(
+                x=data.tolist(), name=label,
+                marker_color=color, opacity=0.65,
+                histnorm="probability density",
+                nbinsx=40, showlegend=False,
+                hovertemplate=f"{label}: %{{x:.2f}}<br>Density: %{{y:.4f}}<extra></extra>",
+            ),
+            row=r, col=c,
+        )
+        x_kde, y_kde = _kde_curve(data, n_points=200)
+        ymax = float(np.max(y_kde)) if len(y_kde) else 1.0
+        if len(x_kde):
+            fig.add_trace(
+                go.Scatter(
+                    x=x_kde.tolist(), y=y_kde.tolist(),
+                    mode="lines", line=dict(color="#0D0D0D", width=1.6),
+                    name="KDE", showlegend=False,
+                    hovertemplate=f"{label}: %{{x:.2f}}<br>KDE: %{{y:.4f}}<extra></extra>",
+                ),
+                row=r, col=c,
+            )
+        # Mean line
+        fig.add_trace(
+            go.Scatter(
+                x=[mean_val, mean_val],
+                y=[0, ymax * 1.05],
+                mode="lines",
+                line=dict(color="#c0392b", width=1.6, dash="dash"),
+                name=f"mean={mean_val:.2f}", showlegend=False,
+                hovertemplate=f"mean = {mean_val:.2f}<extra></extra>",
+            ),
+            row=r, col=c,
+        )
+        fig.update_xaxes(title_text=label,    row=r, col=c, title_font_size=10)
+        fig.update_yaxes(title_text="Density", row=r, col=c, title_font_size=10)
+
+    fig.update_layout(
+        height=720, template=CHART_T,
+        showlegend=False, bargap=0.05,
+        margin=dict(l=10, r=10, t=50, b=20),
+    )
+    return fig
 
 
 def _scatter3d_fig() -> go.Figure:
@@ -854,17 +1241,17 @@ def _kpi_cards():
     ]
 
 
-# ── Pre-compute static images + figures at import ─────────────────────────────
+# ── Pre-compute interactive figures at import (avoids per-request rebuild) ───
 
-_BOX_OUT     = _seaborn_boxplot_img()
-_WT_DIST     = _weight_dist_img()
-_SWARM_IMG   = _swarm_img()
-_BOXEN_IMG   = _boxen_img()
+_BOX_OUT_FIG     = _box_outlier_fig()
+_WT_DIST_FIG     = _weight_dist_fig()
+_SWARM_FIG       = _swarm_fig()
+_BOXEN_FIG       = _boxen_fig()
 
-_HEXBIN_IMG      = _hexbin_img()
-_CONTOUR_IMG     = _contour_kde_img()
-_SCATTER_SUB     = _scatter_subplots_img()
-_HIST_GRID       = _hist_grid_img()
+_HEXBIN_FIG      = _hexbin_fig()
+_CONTOUR_FIG     = _contour_kde_fig()
+_SCATTER_SUB_FIG = _scatter_subplots_fig()
+_HIST_GRID_FIG   = _hist_grid_fig()
 _SCATTER3D       = _scatter3d_fig()
 
 
@@ -874,7 +1261,6 @@ def register_callbacks(app):
 
     @app.callback(
         Output("an-hist-chart",    "figure"),
-        Output("an-qq-chart",      "figure"),
         Output("an-outlier-chart", "figure"),
         Output("an-zscore-chart",  "figure"),
         Output("an-strip-chart",   "figure"),
@@ -887,12 +1273,19 @@ def register_callbacks(app):
         g = group  or "sex_label"
         return (
             _hist_rug_fig(f, g),
-            _qqplot_fig(f),
             _outlier_iqr_fig(f),
             _zscore_fig(f),
             _strip_fig(f, g),
             _regplot_fig(f),
         )
+
+    @app.callback(
+        Output("an-qq-chart",      "figure"),
+        Input("an-field-select",   "value"),
+        Input("an-qq-test-select", "value"),
+    )
+    def _update_qq(field, test):
+        return _qqplot_fig(field or "age_years", test or "Shapiro–Wilk")
 
     @app.callback(
         Output("an-norm-chart", "figure"),
@@ -974,7 +1367,14 @@ def layout() -> html.Div:
             dbc.Col(
                 viz_card(
                     "Q-Q Plot (Normal)",
-                    "Sample quantiles vs theoreticalpoi nts on the diagonal = normally distributed",
+                    "Sample quantiles vs theoretical · pick a normality test below",
+                    dbc.Select(
+                        id="an-qq-test-select",
+                        options=_NORMALITY_OPTS,
+                        value="Shapiro–Wilk",
+                        style={"fontSize": "13px", "marginBottom": "10px",
+                               "border": "1px solid #BFC7D9", "borderRadius": "8px"},
+                    ),
                     graph(_qqplot_fig(), 360, graph_id="an-qq-chart"),
                 ),
                 md=6,
@@ -1040,45 +1440,45 @@ def layout() -> html.Div:
             ),
         ], class_name="g-3 row-gap"),
 
-        # ── Row 5: Hexbin + KDE Contour (seaborn jointplots) ─────────────────
+        # ── Row 5: Hexbin + KDE Contour (interactive Plotly) ─────────────────
         dbc.Row([
             dbc.Col(
-                _img_card(
-                    "Hexbin  Age vs Weight  (seaborn)",
-                    "Cell darkness = record density; marginal histograms on each axis",
-                    _HEXBIN_IMG, height=420,
+                viz_card(
+                    "Hexbin  Age vs Weight",
+                    "Cell darkness = record density; marginal histograms on each axis  hover for counts",
+                    graph(_HEXBIN_FIG, 420, graph_id="an-hexbin-chart"),
                 ),
                 md=6,
             ),
             dbc.Col(
-                _img_card(
-                    "2D KDE Contour  Age vs Weight  (seaborn)",
-                    "Smoothed density contours  Serious vs Non-Serious overlaid",
-                    _CONTOUR_IMG, height=420,
+                viz_card(
+                    "2D KDE Contour  Age vs Weight",
+                    "Smoothed density contours  Serious vs Non-Serious overlaid · click legend to toggle",
+                    graph(_CONTOUR_FIG, 420, graph_id="an-contour-chart"),
                 ),
                 md=6,
             ),
         ], class_name="g-3 row-gap"),
 
-        # ── Row 5b: Scatter subplots ──────────────────────────────────────────
+        # ── Row 5b: Scatter subplots (interactive Plotly) ────────────────────
         dbc.Row([
             dbc.Col(
-                _img_card(
-                    "Multivariate Scatter Subplots  (matplotlib)",
+                viz_card(
+                    "Multivariate Scatter Subplots",
                     "Age×Weight by Sex · by Seriousness · Drugs×Reactions by score · Age×Score + OLS",
-                    _SCATTER_SUB, height=780
+                    graph(_SCATTER_SUB_FIG, 720, graph_id="an-scatter-sub-chart"),
                 ),
                 md=12,
             ),
         ], class_name="g-3 row-gap"),
 
-        # ── Row 5c: Histogram + KDE grid ─────────────────────────────────────
+        # ── Row 5c: Histogram + KDE grid (interactive Plotly) ────────────────
         dbc.Row([
             dbc.Col(
-                _img_card(
-                    "Variable Distributions  Histogram + KDE  (seaborn)",
+                viz_card(
+                    "Variable Distributions  Histogram + KDE",
                     "All numeric fields with KDE overlay and mean line  capped at 99th percentile",
-                    _HIST_GRID, height=780,
+                    graph(_HIST_GRID_FIG, 720, graph_id="an-hist-grid-chart"),
                 ),
                 md=12,
             ),
@@ -1142,41 +1542,41 @@ def layout() -> html.Div:
             ),
         ], class_name="g-3 row-gap"),
 
-        # ── Row 8: Swarm Plot + Boxen Plot (seaborn static) ──────────────────
+        # ── Row 8: Swarm Plot + Boxen Plot (interactive Plotly) ──────────────
         dbc.Row([
             dbc.Col(
-                _img_card(
-                    "Swarm Plot  Seriousness Score by Sex  (seaborn)",
-                    "Non-overlapping points reveal distribution shape  sampled to n=1,500",
-                    _SWARM_IMG, height=320,
+                viz_card(
+                    "Swarm Plot  Seriousness Score by Sex",
+                    "Non-overlapping points reveal distribution shape  sampled to n=400 · hover for value",
+                    graph(_SWARM_FIG, 340, graph_id="an-swarm-chart"),
                 ),
                 md=5,
             ),
             dbc.Col(
-                _img_card(
-                    "Boxen (Letter-Value) Plot  Age by Age Group  (seaborn)",
-                    "Letter-value plot shows distributional tails at multiple probability levels",
-                    _BOXEN_IMG, height=320,
+                viz_card(
+                    "Boxen (Letter-Value) Plot  Age by Age Group",
+                    "Nested percentile boxes show tails at multiple probability levels · hover for stats",
+                    graph(_BOXEN_FIG, 420, graph_id="an-boxen-chart"),
                 ),
                 md=7,
             ),
         ], class_name="g-3 row-gap"),
 
-        # ── Row 9: Seaborn Box Plots + Weight Distribution ────────────────────
+        # ── Row 9: Box Plots + Weight Distribution (interactive Plotly) ──────
         dbc.Row([
             dbc.Col(
-                _img_card(
-                    "Box Plots  All Numeric Variables  (seaborn)",
-                    "Age · Weight · Num Drugs · Num Reactions  fliers are IQR outliers",
-                    _BOX_OUT, height=320,
+                viz_card(
+                    "Box Plots  All Numeric Variables",
+                    "Age · Weight · Num Drugs · Num Reactions  fliers are IQR outliers · hover for stats",
+                    graph(_BOX_OUT_FIG, 380, graph_id="an-box-out-chart"),
                 ),
                 md=7,
             ),
             dbc.Col(
-                _img_card(
-                    "Patient Weight  Histogram + KDE + Rug  (matplotlib)",
+                viz_card(
+                    "Patient Weight  Histogram + KDE + Rug",
                     "Raw distribution and log-transformed  showing right skew and outliers",
-                    _WT_DIST, height=320,
+                    graph(_WT_DIST_FIG, 380, graph_id="an-weight-dist-chart"),
                 ),
                 md=5,
             ),

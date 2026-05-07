@@ -49,7 +49,7 @@ def _trend_fig(df: pd.DataFrame) -> go.Figure:
     ))
     fig.update_layout(
         height=340, template=CHART_T,
-        xaxis=dict(tickangle=-40, tickfont=dict(size=10)),
+        xaxis=dict(tickangle=-40, tickfont=dict(size=10), title="Year"),
         yaxis=dict(title="Report Count", tickformat=","),
         hovermode="x unified",
         legend=dict(orientation="h", x=0, y=1.12, font_size=11),
@@ -74,8 +74,8 @@ def _rate_fig(df: pd.DataFrame) -> go.Figure:
     ))
     fig.update_layout(
         height=270, template=CHART_T,
-        xaxis=dict(tickangle=-40, tickfont=dict(size=10)),
-        yaxis=dict(title="%", ticksuffix="%"),
+        xaxis=dict(tickangle=-40, tickfont=dict(size=10), title="Year"),
+        yaxis=dict(title="Percentage", ticksuffix="%"),
         hovermode="x unified",
         legend=dict(orientation="h", x=0, y=1.12, font_size=11),
         margin=dict(l=10, r=10, t=30, b=50),
@@ -112,7 +112,7 @@ def _yearly_bar_fig(df: pd.DataFrame) -> go.Figure:
     ))
     fig.update_layout(
         height=290, template=CHART_T, barmode="stack",
-        xaxis=dict(tickfont=dict(size=11)),
+        xaxis=dict(tickfont=dict(size=11), title="Year"),
         yaxis=dict(title="Reports", tickformat=","),
         legend=dict(orientation="h", x=0, y=1.12, font_size=11),
         margin=dict(l=10, r=10, t=30, b=10),
@@ -188,7 +188,7 @@ def _waterfall_fig(df: pd.DataFrame) -> go.Figure:
     ))
     fig.update_layout(
         height=280, template=CHART_T,
-        xaxis=dict(tickfont=dict(size=11)),
+        xaxis=dict(tickfont=dict(size=11), title="Year"),
         yaxis=dict(title="Reports", tickformat=","),
         margin=dict(l=10, r=10, t=20, b=10),
     )
@@ -271,8 +271,8 @@ def _calendar_heatmap_fig(df: pd.DataFrame) -> go.Figure:
     ))
     fig.update_layout(
         height=280, template=CHART_T,
-        xaxis=dict(tickfont=dict(size=11)),
-        yaxis=dict(tickfont=dict(size=10), automargin=True),
+        xaxis=dict(tickfont=dict(size=11), title="Year"),
+        yaxis=dict(tickfont=dict(size=10), automargin=True, title="Month"),
         margin=dict(l=10, r=20, t=10, b=10),
     )
     return fig
